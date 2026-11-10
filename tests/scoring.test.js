@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_HARD_STEP,
   HARD_SHARE,
+  HARD_STEPS,
   KNOWN_AT,
   MAX_SCORE,
   MIN_SCORE,
   cleanRead,
   fromAnki,
+  hardStepOf,
   clearHard,
   markHard,
   markKnown,
@@ -27,29 +30,43 @@ function rng(seed = 1) {
 
 const words = (n) => Array.from({ length: n }, (_, i) => ({ id: `w${i}`, de: `w${i}`, en: '', rank: i }));
 
-test('marking hard lowers the score and repeated marks go lower, to a floor', () => {
-  let p = markHard(undefined, 1);
+test('marking hard lowers the score by the chosen step, and repeated marks go lower, to a floor', () => {
+  let p = markHard(undefined, 1, 3);
   assert.equal(p.s, -3);
   assert.equal(statusOf(p), 'hard');
-  p = markHard(p, 2);
+  p = markHard(p, 2, 3);
   assert.equal(p.s, -6);
-  p = markHard(p, 3);
+  p = markHard(p, 3, 3);
   assert.equal(p.s, MIN_SCORE);
 });
 
+test('the step is 2 unless the learner chooses another, from 1 to 5', () => {
+  assert.equal(DEFAULT_HARD_STEP, 2);
+  assert.equal(markHard(undefined, 1).s, -2);
+  for (const step of HARD_STEPS) assert.equal(markHard(undefined, 1, step).s, -step);
+  assert.equal(hardStepOf({ hardStep: 4 }), 4);
+  assert.equal(hardStepOf({ hardStep: '3' }), 3);
+  for (const bad of [undefined, null, {}, { hardStep: 0 }, { hardStep: 9 }, { hardStep: 'x' }]) {
+    assert.equal(hardStepOf(bad), DEFAULT_HARD_STEP);
+  }
+});
+
 test('marking a familiar word hard starts from zero, not from its old score', () => {
-  const p = markHard({ s: 4, n: 5, l: 0, t: 0, u: 0 }, 1);
+  const p = markHard({ s: 4, n: 5, l: 0, t: 0, u: 0 }, 1, 3);
   assert.equal(p.s, -3);
 });
 
-test('a hard word fades back to normal after three clean reads', () => {
-  let p = markHard(undefined, 1);
-  p = cleanRead(p, 2);
-  p = cleanRead(p, 3);
-  assert.equal(statusOf(p), 'hard');
-  p = cleanRead(p, 4);
-  assert.equal(p.s, 0);
-  assert.equal(statusOf(p), 'learning');
+test('a hard word fades back to normal after as many clean reads as the step', () => {
+  for (const step of HARD_STEPS) {
+    let p = markHard(undefined, 1, step);
+    for (let i = 1; i < step; i++) {
+      p = cleanRead(p, 1 + i);
+      assert.equal(statusOf(p), 'hard', `step ${step}, read ${i}`);
+    }
+    p = cleanRead(p, 9);
+    assert.equal(p.s, 0);
+    assert.equal(statusOf(p), 'learning');
+  }
 });
 
 test('clean reads raise the score up to a ceiling and make the word known', () => {
@@ -115,7 +132,7 @@ test('the harder of two hard words is picked more often', () => {
   const list = words(40);
   const progress = {};
   for (let i = 0; i < 40; i++) progress[`w${i}`] = markHard(undefined, 1);
-  progress.w0 = markHard(progress.w0, 2); // -6 against -3 for the rest
+  progress.w0 = markHard(progress.w0, 2); // -4 against -2 for the rest
   const r = rng(11);
   let harder = 0;
   let other = 0;

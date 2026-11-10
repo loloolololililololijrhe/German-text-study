@@ -4,12 +4,16 @@
 // changed. Merging keeps the newer copy of every entry, so two devices that
 // were both used offline lose nothing when they next sync.
 
+import { DEFAULT_HARD_STEP } from './scoring.js';
+
 export const DEFAULT_PREFS = {
   level: 'A2',
   length: 'medium',
   topic: 'fit',
   model: 'claude-opus-5-5',
   autoHard: true,
+  hardStep: DEFAULT_HARD_STEP,
+  underlineHard: true,
   rate: 0.85,
   u: 0,
 };

@@ -3,7 +3,17 @@
 import { store } from '../store.js';
 import { fill, h, icon, plural, toast } from './dom.js';
 import { normKey } from '../lib/words.js';
-import { cleanRead, clearHard, lookedUp, markHard, pickTargets, resetWord, seen, statusOf } from '../lib/scoring.js';
+import {
+  cleanRead,
+  clearHard,
+  hardStepOf,
+  lookedUp,
+  markHard,
+  pickTargets,
+  resetWord,
+  seen,
+  statusOf,
+} from '../lib/scoring.js';
 import { SentenceStream, segmentSentence } from '../lib/textparse.js';
 import { LENGTHS, LEVELS, TOPICS, buildUserPrompt } from '../lib/prompt.js';
 import { DEFAULT_PREFS } from '../lib/merge.js';
@@ -84,6 +94,12 @@ export function mountReader(el, options) {
 /** Called when the Read tab becomes visible, to pick up changes made elsewhere. */
 export function showReader() {
   if (!text) render();
+  else paintUnderline();
+}
+
+/** Hard words returning from earlier texts are underlined, unless the learner turned that off. */
+function paintUnderline() {
+  bodyEl?.classList.toggle('no-hard-underline', store.state.prefs.underlineHard === false);
 }
 
 export function leaveReader() {
@@ -310,6 +326,7 @@ async function generate() {
 function renderText() {
   bodyEl = h('div', { class: 'text-body', lang: 'de', onclick: onBodyClick, onkeydown: onBodyKey });
   paraEl = null;
+  paintUnderline();
   text.sentences.forEach((_, i) => appendSentence(i));
 
   titleEl = h('h1', { class: 'text-title', lang: 'de' }, text.title || ' ');
@@ -470,7 +487,7 @@ function flag(word) {
   const before = store.progressOf(entry.id) || null;
   text.hard[entry.id] = before;
   text.tapped[entry.id] = true;
-  store.setProgress(entry.id, markHard(before, Date.now()));
+  store.setProgress(entry.id, markHard(before, Date.now(), hardStepOf(store.state.prefs)));
   saveText();
 }
 

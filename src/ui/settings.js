@@ -4,6 +4,7 @@ import { BUILTIN_SRC, store } from '../store.js';
 import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
 import { MODELS } from '../lib/models.js';
 import { LEVELS } from '../lib/prompt.js';
+import { HARD_SHARE, HARD_STEPS, hardStepOf } from '../lib/scoring.js';
 import { tts } from '../tts.js';
 import { pickDeckFile } from './import.js';
 
@@ -14,6 +15,7 @@ let root;
 let sourcesEl;
 let syncEl;
 let voiceEl;
+let rulesEl;
 
 export function mountSettings(el) {
   root = el;
@@ -39,6 +41,7 @@ function render() {
   sourcesEl = h('div');
   syncEl = h('div');
   voiceEl = h('div');
+  rulesEl = h('ul', { class: 'help-list' });
 
   const keyInput = h('input', {
     class: 'input',
@@ -130,6 +133,54 @@ function render() {
           onchange: (e) => store.updatePrefs({ autoHard: e.target.checked }),
         }),
       ),
+      h(
+        'label',
+        { class: 'field' },
+        h('span', { class: 'label' }, 'A hard word is normal again after'),
+        h(
+          'select',
+          {
+            class: 'input',
+            onchange: (e) => {
+              store.updatePrefs({ hardStep: Number(e.target.value) });
+              drawRules();
+            },
+          },
+          HARD_STEPS.map((n) =>
+            h(
+              'option',
+              { value: String(n), selected: n === hardStepOf(prefs) },
+              `${n} clean ${n === 1 ? 'read' : 'reads'}`,
+            ),
+          ),
+        ),
+        h(
+          'span',
+          { class: 'help' },
+          'Marking a word hard lowers its score by this much, and every text you read it in without tapping raises it by 1. A higher number repeats each hard word more, but fewer new words fit in. Applies to words you mark from now on.',
+        ),
+      ),
+      h(
+        'label',
+        { class: 'switch-row' },
+        h(
+          'span',
+          null,
+          h('span', { class: 'switch-title' }, 'Underline hard words'),
+          h(
+            'span',
+            { class: 'help' },
+            'On: a hard word from an earlier text is underlined when it comes back. Off: it looks like any other word, so you find out for yourself whether you remember it.',
+          ),
+        ),
+        h('input', {
+          class: 'switch',
+          type: 'checkbox',
+          role: 'switch',
+          checked: prefs.underlineHard !== false,
+          onchange: (e) => store.updatePrefs({ underlineHard: e.target.checked }),
+        }),
+      ),
       tts.supported
         ? [
             h(
@@ -170,34 +221,7 @@ function render() {
 
     card('Sync between devices', syncEl),
 
-    card(
-      'How words are chosen',
-      h(
-        'ul',
-        { class: 'help-list' },
-        h('li', null, 'Every word has a score. New words start at 0.'),
-        h(
-          'li',
-          null,
-          'Marking a word hard drops its score by 3. Hard words get up to 60% of the places in each new text.',
-        ),
-        h(
-          'li',
-          null,
-          'Each time you finish a text, every word in it that you did not tap goes up by 1. So a hard word needs three clean reads to become normal again.',
-        ),
-        h(
-          'li',
-          null,
-          'The other places go to words from your Anki deck that you do not know yet. Each point of score halves a word’s chance of being picked.',
-        ),
-        h(
-          'li',
-          null,
-          'The built-in common words are not chosen while deck words are left to learn. They still appear whenever a text needs them, and you can tap and mark them like any other word.',
-        ),
-      ),
-    ),
+    card('How words are chosen', rulesEl),
 
     card(
       'Start over',
@@ -225,6 +249,37 @@ function render() {
   drawSources();
   drawSync();
   drawVoices();
+  drawRules();
+}
+
+function drawRules() {
+  if (!rulesEl) return;
+  const step = hardStepOf(store.state.prefs);
+  const reads = step === 1 ? 'one clean read' : `${step} clean reads`;
+  fill(
+    rulesEl,
+    h('li', null, 'Every word has a score. New words start at 0.'),
+    h(
+      'li',
+      null,
+      `Marking a word hard drops its score by ${step}. Hard words get up to ${Math.round(HARD_SHARE * 100)}% of the places in each new text.`,
+    ),
+    h(
+      'li',
+      null,
+      `Each time you finish a text, every word in it that you did not tap goes up by 1. So a hard word needs ${reads} to become normal again.`,
+    ),
+    h(
+      'li',
+      null,
+      'The other places go to words from your Anki deck that you do not know yet. Each point of score halves a word’s chance of being picked.',
+    ),
+    h(
+      'li',
+      null,
+      'The built-in common words are not chosen while deck words are left to learn. They still appear whenever a text needs them, and you can tap and mark them like any other word.',
+    ),
+  );
 }
 
 function drawVoices() {

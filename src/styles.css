@@ -513,6 +513,10 @@ a {
   text-underline-offset: 0.2em;
 }
 
+.no-hard-underline .w.is-hard {
+  text-decoration: none;
+}
+
 /* Marked hard in this text. */
 .w.is-marked {
   background: var(--hard-soft);
@@ -966,6 +970,11 @@ a {
 
 .switch-row .help {
   display: block;
+}
+
+.field > .help {
+  display: block;
+  margin-top: 8px;
 }
 
 .switch {

@@ -55,7 +55,7 @@ Every word has a score, starting at 0.
 
 | What happens | Effect on the word |
 | --- | --- |
-| You mark it hard (or tap it, with "Mark tapped words as hard" on) | Score drops by 3, down to −6 at most |
+| You mark it hard (or tap it, with "Mark tapped words as hard" on) | Score drops by 2, down to −6 at most |
 | It appears in a text you finish and you did not tap it | Score rises by 1, up to +6 |
 | You tap it without marking it hard | Counted as seen, score unchanged |
 | "I know this now" | A hard word goes straight back to normal |
@@ -73,8 +73,14 @@ depending on length), chosen in this order:
 Words that are not targets still appear whenever a text needs them, and every
 word in a finished text is scored the same way.
 
-So a word you marked hard needs three clean reads to become normal again, and
-the **Words** tab shows every word with its score.
+So a word you marked hard needs two clean reads to become normal again. That
+number is a setting (**Settings → Reading → A hard word is normal again
+after**, 1 to 5): a higher number repeats each hard word more, but leaves room
+for fewer new words. The **Words** tab shows every word with its score.
+
+Hard words coming back from earlier texts are underlined. **Settings → Reading
+→ Underline hard words** turns that off, so you find out for yourself whether
+you remember them.
 
 ## Publishing
 

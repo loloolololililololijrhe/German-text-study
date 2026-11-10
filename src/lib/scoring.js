@@ -1,7 +1,8 @@
 // How words gain and lose weight. Pure functions, no DOM.
 //
 // Every word has one number, its score `s`:
-//   s < 0   hard      marking a word hard pushes it HARD_STEP below zero
+//   s < 0   hard      marking a word hard pushes it below zero, by the step
+//                     the learner chose in Settings (2 unless changed)
 //   s = 0   new
 //   s > 0   familiar  each time you read past it without tapping, s goes up by 1
 //
@@ -11,7 +12,13 @@
 
 export const MIN_SCORE = -6;
 export const MAX_SCORE = 6;
-export const HARD_STEP = 3;
+
+/**
+ * How far below zero a word drops when it is marked hard, which is also how
+ * many clean reads it then needs to count as normal again.
+ */
+export const DEFAULT_HARD_STEP = 2;
+export const HARD_STEPS = [1, 2, 3, 4, 5];
 export const KNOWN_AT = 3;
 
 /** Share of a text's target words reserved for hard words, when there are enough. */
@@ -27,10 +34,16 @@ export function statusOf(p) {
   return 'new';
 }
 
+/** The learner's chosen step, or the default if the stored value is not one of the choices. */
+export function hardStepOf(prefs) {
+  const n = Math.round(Number(prefs?.hardStep));
+  return HARD_STEPS.includes(n) ? n : DEFAULT_HARD_STEP;
+}
+
 /** The learner flagged the word. Flagging an already-hard word makes it harder. */
-export function markHard(p, now) {
+export function markHard(p, now, step = DEFAULT_HARD_STEP) {
   const b = p || blank();
-  return { ...b, s: Math.max(MIN_SCORE, Math.min(b.s, 0) - HARD_STEP), l: b.l + 1, u: now };
+  return { ...b, s: Math.max(MIN_SCORE, Math.min(b.s, 0) - step), l: b.l + 1, u: now };
 }
 
 /** The word appeared in a finished text and was not tapped. */
