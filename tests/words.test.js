@@ -87,3 +87,23 @@ test('find matches the lemma the model writes to the list entry', () => {
     ['zum Beispiel'],
   );
 });
+
+test('in a deck that uses capitals, a lower-case verb does not replace a built-in noun', () => {
+  const builtin = parseWordList('der Laden = shop\ndie Miete = rent\ndas Jahr = year\nder Husten = cough', 'Common');
+  const index = buildWordIndex({
+    builtin,
+    custom: {
+      Jahr: { de: 'das Jahr', en: 'Noun: year', src: 'Deck', r: 0 },
+      laden: { de: 'laden', en: 'Verb: to load', src: 'Deck', r: 1 },
+      husten: { de: 'husten', en: 'Verb: to cough', src: 'Deck', r: 2 },
+      // A noun the deck forgot to capitalise is still the same noun.
+      miete: { de: 'die miete', en: 'Noun: rent', src: 'Deck', r: 3 },
+    },
+  });
+  assert.equal(index.find('der Laden').en, 'shop');
+  assert.equal(index.find('laden').en, 'Verb: to load');
+  assert.equal(index.find('der Husten').en, 'cough');
+  assert.equal(index.find('husten').en, 'Verb: to cough');
+  assert.equal(index.find('die Miete').en, 'Noun: rent');
+  assert.equal(index.list.length, 6);
+});

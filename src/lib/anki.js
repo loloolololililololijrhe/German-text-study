@@ -139,12 +139,32 @@ function readCollection(db) {
     }
   }
 
+  // Deck names, to suggest a name for the import. Older files keep them in the
+  // `col` row; newer ones in a table, with \x1f between parent and child deck.
+  const deckNames = new Map();
+  try {
+    const decks = JSON.parse(rows(db, 'SELECT decks FROM col')[0]?.[0] || '{}');
+    for (const [id, d] of Object.entries(decks)) deckNames.set(String(id), d.name || '');
+  } catch {
+    /* newer schema, handled below */
+  }
+  if (!deckNames.size) {
+    try {
+      for (const [id, name] of rows(db, 'SELECT id, name FROM decks')) deckNames.set(String(id), String(name));
+    } catch {
+      /* no deck names: the file name is used instead */
+    }
+  }
+
   // In an unstudied deck, a card's `due` is its position in the intended order.
   const order = new Map();
+  const deckOf = new Map();
   let untouched = true;
   try {
-    for (const [nid, due, maxType] of rows(db, 'SELECT nid, MIN(due), MAX(type) FROM cards GROUP BY nid')) {
+    const cards = rows(db, 'SELECT nid, MIN(due), MAX(type), MIN(did) FROM cards GROUP BY nid');
+    for (const [nid, due, maxType, did] of cards) {
       order.set(String(nid), due);
+      deckOf.set(String(nid), String(did));
       if (maxType !== 0) untouched = false;
     }
   } catch {
@@ -162,14 +182,22 @@ function readCollection(db) {
 
   const grouped = new Map();
   for (const n of notes) {
-    if (!grouped.has(n.mid)) grouped.set(n.mid, []);
-    grouped.get(n.mid).push(n.fields);
+    if (!grouped.has(n.mid)) grouped.set(n.mid, { list: [], decks: new Map() });
+    const g = grouped.get(n.mid);
+    g.list.push(n.fields);
+    const did = deckOf.get(n.id);
+    if (did) g.decks.set(did, (g.decks.get(did) || 0) + 1);
   }
-  const noteTypes = [...grouped.entries()].map(([mid, list]) => {
+  const noteTypes = [...grouped.entries()].map(([mid, { list, decks }]) => {
     const t = types.get(mid);
     const width = Math.max(...list.map((f) => f.length));
     const fields = Array.from({ length: width }, (_, i) => t?.fields[i] || `Field ${i + 1}`);
-    return { name: t?.name || 'Notes', fields, notes: list };
+    const mainDeck = [...decks.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const deck = (deckNames.get(mainDeck) || '')
+      .split(/\x1f|::/)
+      .pop()
+      .trim();
+    return { name: t?.name || 'Notes', deck, fields, notes: list };
   });
   noteTypes.sort((a, b) => b.notes.length - a.notes.length);
   if (!noteTypes.length) throw new Error('This deck has no notes in it.');
@@ -257,48 +285,145 @@ function parseDelimited(text, sep) {
   return out;
 }
 
-const GERMAN_HINT = /[äöüß]|^(der|die|das|ein|eine|sich)\s|(en|ung|keit|heit|lich|isch)$/i;
-const ENGLISH_HINT = /^(to|the|a|an)\s|\b(of|with|and|or|is|not)\b|(ing|tion|ly|ness)$/i;
+// ---- choosing the fields -------------------------------------------------
 
-/** Guess which field holds the German word and which the English meaning. */
-export function guessMapping(noteType) {
-  const sample = noteType.notes.slice(0, 200);
-  const score = (i, re) => sample.filter((n) => n[i] && re.test(n[i])).length;
-  const usable = noteType.fields.map((name, i) => ({ i, name })).filter((f) => sample.some((n) => n[f.i]));
-  if (usable.length < 2) return { de: usable[0]?.i ?? 0, en: usable[0]?.i === 0 ? 1 : 0 };
+const GERMAN_NAME = /german|deutsch|^de$|wort/i;
+const ENGLISH_NAME = /english|englisch|^en$|definition|meaning|bedeutung|gloss|translation|übersetzung/i;
+// "Front", "Back" and "Word" say where a field sits, not which language it holds.
+const WEAK_GERMAN_NAME = /front|word|vocab|expression|lemma|term/i;
+const WEAK_ENGLISH_NAME = /back/i;
+const NOT_VOCAB_NAME = /sentence|example|beispiel|satz|audio|sound|image|picture|bild|index|sort|hint|note/i;
 
-  const byName = (re) => usable.find((f) => re.test(f.name))?.i;
-  let de = byName(/german|deutsch|^de$|wort/i);
-  let en = byName(/english|englisch|^en$|meaning|translation|übersetzung|bedeutung/i);
-  if (de == null) {
-    de = usable
-      .filter((f) => f.i !== en)
-      .map((f) => ({ i: f.i, v: score(f.i, GERMAN_HINT) - score(f.i, ENGLISH_HINT) }))
-      .sort((a, b) => b.v - a.v || a.i - b.i)[0].i;
-  }
-  if (en == null) {
-    en = usable
-      .filter((f) => f.i !== de)
-      .map((f) => ({ i: f.i, v: score(f.i, ENGLISH_HINT) - score(f.i, GERMAN_HINT) }))
-      .sort((a, b) => b.v - a.v || a.i - b.i)[0].i;
-  }
-  return { de, en };
+const GERMAN_TEXT = /[äöüß]|^(der|die|das|sich)\s/i;
+const ENGLISH_TEXT = /\bto \p{L}|^(the|a|an)\s|\b(of|with|and|or)\b/iu;
+
+// "Definitions 1", "Definitions 2", ... Names this module made up do not count.
+const NUMBERED = /^(.*?\D)\s*(\d+)$/;
+const GENERATED = /^(field|column)$/i;
+
+function median(numbers) {
+  const sorted = [...numbers].sort((a, b) => a - b);
+  return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
 }
 
-/** Turn mapped notes into word pairs, in deck order, dropping what cannot be used. */
-export function extractWords(noteType, deIndex, enIndex) {
+/** What each field of a note type looks like, judged from a sample of its notes. */
+function profileFields(noteType) {
+  const sample = noteType.notes.slice(0, 300);
+  return noteType.fields.map((name, i) => {
+    const values = sample.map((n) => n[i]).filter(Boolean);
+    const share = (re) => (sample.length ? values.filter((v) => re.test(v)).length / sample.length : 0);
+    const sentences = values.length ? values.filter((v) => /[.!?]$/.test(v)).length / values.length : 0;
+    return {
+      i,
+      name,
+      filled: values.length,
+      // Words and short glosses, as opposed to sentences and numbering.
+      wordLike:
+        values.length > 0 &&
+        median(values.map((v) => v.split(/\s+/).length)) <= 4 &&
+        sentences <= 0.5 &&
+        share(/^[\d.,]+$/) < 0.5,
+      german: share(GERMAN_TEXT),
+      english: share(ENGLISH_TEXT),
+    };
+  });
+}
+
+/**
+ * The choices for the "meaning" field: every field on its own, plus each run
+ * of numbered fields ("Definitions 1-3") offered as one combined choice.
+ */
+export function fieldChoices(noteType) {
+  const groups = new Map();
+  noteType.fields.forEach((name, i) => {
+    const m = NUMBERED.exec(name);
+    if (!m || GENERATED.test(m[1].trim())) return;
+    const key = m[1].trim().toLowerCase();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ i, n: Number(m[2]), base: m[1].trim() });
+  });
+  const combined = [...groups.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => {
+      g.sort((a, b) => a.n - b.n);
+      return { label: `${g[0].base} ${g[0].n}–${g.at(-1).n}, combined`, fields: g.map((x) => x.i) };
+    });
+  return [...combined, ...noteType.fields.map((name, i) => ({ label: name, fields: [i] }))];
+}
+
+/**
+ * Guess which field holds the German word and which field or fields hold the
+ * English meaning. Returns { de: fieldIndex, en: fieldIndexes }.
+ */
+export function guessMapping(noteType) {
+  const fields = profileFields(noteType);
+  let pool = fields.filter((f) => f.wordLike && !NOT_VOCAB_NAME.test(f.name));
+  if (pool.length < 2) pool = fields.filter((f) => f.filled);
+  if (pool.length < 2) return { de: pool[0]?.i ?? 0, en: [pool[0]?.i === 0 ? 1 : 0] };
+
+  const best = (list, score) => list.map((f) => ({ f, v: score(f) })).sort((a, b) => b.v - a.v || a.f.i - b.f.i)[0].f;
+  const named = (f, strong, weak) => (strong.test(f.name) ? 1 : weak.test(f.name) ? 0.3 : 0);
+
+  const de = best(pool, (f) => named(f, GERMAN_NAME, WEAK_GERMAN_NAME) + f.german - f.english);
+  const en = best(
+    pool.filter((f) => f !== de),
+    (f) => named(f, ENGLISH_NAME, WEAK_ENGLISH_NAME) + f.english - f.german,
+  );
+  const group = fieldChoices(noteType).find((c) => c.fields.length > 1 && c.fields.includes(en.i));
+  return { de: de.i, en: group ? group.fields : [en.i] };
+}
+
+/** Index of the note type that looks most like German vocabulary (a file can hold several decks). */
+export function bestNoteType(noteTypes) {
+  const scores = noteTypes.map((t) =>
+    Math.max(
+      0,
+      ...profileFields(t)
+        .filter((f) => f.wordLike)
+        .map((f) => f.german - f.english),
+    ),
+  );
+  return scores.indexOf(Math.max(...scores));
+}
+
+/**
+ * Join the meanings of one word. When every part carries the same label
+ * ("Verb: to become", "Verb: will"), the label is written once.
+ */
+export function joinMeanings(values) {
+  const parts = values.map((v) => (v || '').trim()).filter(Boolean);
+  if (parts.length > 1) {
+    const split = parts.map((p) => /^(\p{Lu}[\p{L} ().]{1,24}):\s+(.+)$/u.exec(p));
+    if (split.every((m) => m && m[1] === split[0][1])) {
+      return `${split[0][1]}: ${split.map((m) => m[2]).join('; ')}`;
+    }
+  }
+  return parts.join('; ');
+}
+
+/**
+ * Turn mapped notes into word pairs, in deck order, dropping what cannot be
+ * used. `enIndexes` is one field index or several, whose values are joined.
+ * A word that appears twice is kept once, with the fuller of its meanings.
+ */
+export function extractWords(noteType, deIndex, enIndexes) {
+  const enList = [enIndexes].flat();
   const words = [];
-  const seen = new Set();
+  const at = new Map();
   const skipped = { empty: 0, long: 0, duplicate: 0 };
+  const senses = (en) => en.split(';').length;
   for (const n of noteType.notes) {
     const de = n[deIndex] || '';
-    const en = n[enIndex] || '';
+    const en = joinMeanings(enList.map((i) => n[i]));
     const id = normKey(de);
     if (!id || !en) skipped.empty++;
     else if (id.split(' ').length > 5) skipped.long++;
-    else if (seen.has(id)) skipped.duplicate++;
-    else {
-      seen.add(id);
+    else if (at.has(id)) {
+      skipped.duplicate++;
+      const first = words[at.get(id)];
+      if (senses(en) > senses(first.en)) first.en = en;
+    } else {
+      at.set(id, words.length);
       words.push({ de, en });
     }
   }

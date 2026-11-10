@@ -2,7 +2,7 @@
 
 import { store } from '../store.js';
 import { fill, h, plural, toast } from './dom.js';
-import { extractWords, guessMapping, parseAnkiText, parseApkg } from '../lib/anki.js';
+import { bestNoteType, extractWords, fieldChoices, guessMapping, parseAnkiText, parseApkg } from '../lib/anki.js';
 
 let sqlPromise;
 
@@ -51,10 +51,21 @@ export function pickDeckFile() {
   input.click();
 }
 
-function openMapping(parsed, defaultName) {
-  let typeIndex = 0;
-  let mapping = guessMapping(parsed.noteTypes[0]);
-  const nameInput = h('input', { class: 'input', type: 'text', value: defaultName, maxlength: '60' });
+function openMapping(parsed, fileName) {
+  // A collection file can hold decks for several languages; start on the German one.
+  let typeIndex = bestNoteType(parsed.noteTypes);
+  let mapping = guessMapping(parsed.noteTypes[typeIndex]);
+  const suggestedName = () => parsed.noteTypes[typeIndex].deck || fileName;
+  let nameEdited = false;
+  const nameInput = h('input', {
+    class: 'input',
+    type: 'text',
+    value: suggestedName(),
+    maxlength: '60',
+    oninput: () => {
+      nameEdited = true;
+    },
+  });
   const body = h('div', { class: 'dialog-body' });
   const dialog = h('dialog', { class: 'dialog' }, body);
   dialog.addEventListener('close', () => dialog.remove());
@@ -68,6 +79,8 @@ function openMapping(parsed, defaultName) {
 
   const draw = () => {
     const type = parsed.noteTypes[typeIndex];
+    const choices = fieldChoices(type);
+    const enChoice = choices.findIndex((c) => c.fields.join() === mapping.en.join());
     const { words, skipped } = extractWords(type, mapping.de, mapping.en);
     const dropped = skipped.empty + skipped.long + skipped.duplicate;
     const reasons = [
@@ -83,16 +96,17 @@ function openMapping(parsed, defaultName) {
         h(
           'label',
           { class: 'field' },
-          h('span', { class: 'label' }, 'Card type'),
+          h('span', { class: 'label' }, 'Deck'),
           select(
-            parsed.noteTypes.map((t) => `${t.name} (${plural(t.notes.length, 'note')})`),
+            parsed.noteTypes.map((t) => `${t.deck || t.name} (${plural(t.notes.length, 'note')})`),
             typeIndex,
             (i) => {
               typeIndex = i;
               mapping = guessMapping(parsed.noteTypes[i]);
+              if (!nameEdited) nameInput.value = suggestedName();
               draw();
             },
-            'Card type',
+            'Deck',
           ),
         ),
       h(
@@ -108,7 +122,12 @@ function openMapping(parsed, defaultName) {
           'label',
           { class: 'field' },
           h('span', { class: 'label' }, 'English meaning is in'),
-          select(type.fields, mapping.en, (i) => ((mapping.en = i), draw()), 'English field'),
+          select(
+            choices.map((c) => c.label),
+            enChoice,
+            (i) => ((mapping.en = choices[i].fields), draw()),
+            'English field',
+          ),
         ),
       ),
       h(

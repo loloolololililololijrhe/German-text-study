@@ -60,9 +60,20 @@ export function buildWordIndex({ builtin = [], deck = [], custom = {} }) {
     add({ id: normKey(d.de), de: d.de, en: d.en, src: d.src || 'deck', rank: i });
   });
 
-  // "hund" in a lower-cased deck is the same word as built-in "der Hund", but
-  // "essen" must not swallow "das Essen" when the built-in list has both.
-  const higherLower = new Set([...byId.keys()].map((k) => k.toLowerCase()));
+  // A built-in word whose spelling differs from a deck word only by capital
+  // letter is usually the same word: decks often write "hund" for "der Hund".
+  // It is a different word when the built-in list has both spellings
+  // ("essen", "das Essen"), or when the deck does use capitals and the two are
+  // different kinds of word (the deck's verb "laden" next to "der Laden").
+  const isNoun = (e) => /^\p{Lu}/u.test(e.id) || /^(der|die|das)\s/i.test(e.de);
+  const higher = new Map();
+  const capitalising = new Set();
+  for (const e of byId.values()) {
+    const k = e.id.toLowerCase();
+    if (!higher.has(k)) higher.set(k, []);
+    higher.get(k).push(e);
+    if (/^\p{Lu}/u.test(e.id)) capitalising.add(e.src);
+  }
   const builtinLower = new Map();
   for (const b of builtin) {
     const k = b.id.toLowerCase();
@@ -71,8 +82,10 @@ export function buildWordIndex({ builtin = [], deck = [], custom = {} }) {
   for (const b of builtin) {
     if (byId.has(b.id)) continue;
     const k = b.id.toLowerCase();
-    if (higherLower.has(k) && builtinLower.get(k) === 1) continue;
-    add(b);
+    const sameWord =
+      builtinLower.get(k) === 1 &&
+      (higher.get(k) || []).some((e) => !capitalising.has(e.src) || isNoun(e) === isNoun(b));
+    if (!sameWord) add(b);
   }
 
   const list = [...byId.values()];

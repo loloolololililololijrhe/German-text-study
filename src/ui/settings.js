@@ -164,7 +164,7 @@ function render() {
       h(
         'p',
         { class: 'help' },
-        'Choose an Anki .apkg file, or a “Notes in Plain Text” export. Words that are also in the built-in list are merged, so nothing appears twice.',
+        'Choose an Anki .apkg or .colpkg file, or a “Notes in Plain Text” export. Words that are also in the built-in list are merged, so nothing appears twice.',
       ),
     ),
 

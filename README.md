@@ -18,9 +18,11 @@ words you find hard come back more often until they stick.
 
 ### Your Anki deck
 
-**Settings → Word lists → Import Anki deck** accepts an `.apkg` file or a
-"Notes in Plain Text" export. You choose which field is the German word and
-which is the English meaning, and the words are added to the list.
+**Settings → Word lists → Import Anki deck** accepts an `.apkg` deck, a
+`.colpkg` collection, or a "Notes in Plain Text" export. The app suggests which
+deck to take (a collection can hold several), which field is the German word
+and which field or fields hold the English meaning; check the preview, change
+them if needed, and the words are added to the list.
 
 The app also ships with about 1,600 common German words, cognates included, so
 words your deck leaves out are still covered. A word that is in both appears
@@ -28,6 +30,9 @@ once, with your deck's wording.
 
 To make a deck the built-in default for everyone who opens the site, put its
 words in `src/data/deck.json` as `[{ "de": "der Hund", "en": "dog" }, ...]`.
+Only do this with a list you are free to publish: the repository and the site
+are public. A deck you bought belongs in the import instead, where it stays in
+your browser and your own sync gist.
 
 ### Sync between devices
 
