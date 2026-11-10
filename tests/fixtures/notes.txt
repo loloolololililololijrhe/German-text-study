@@ -1,0 +1,20 @@
+#separator:tab
+#html:true
+#notetype column:1
+#deck column:2
+#tags column:6
+German Vocab	German A2	der Bahnhof	train station	Der Zug steht am Bahnhof.	
+German Vocab	German A2	<b>die Zeitung</b>, -en	newspaper	Ich lese die Zeitung.	
+German Vocab	German A2	sich erinnern (an)	to remember	Ich erinnere mich an dich.	
+German Vocab	German A2	aufstehen [sound:aufstehen.mp3]	to get up	Er steht fr&uuml;h auf.	
+German Vocab	German A2	m&uuml;de	tired	Sie ist m&uuml;de.	
+German Vocab	German A2	der Schl&uuml;ssel<br>die Schl&uuml;ssel	key		
+German Vocab	German A2	gehen, ging, ist gegangen	to go	Wir gehen nach Hause.	
+German Vocab	German A2	das Essen	food; meal	Das Essen ist fertig.	
+German Vocab	German A2	essen	to eat	Wir essen um acht.	
+German Vocab	German A2	zum Beispiel	for example	Ich mag Obst, zum Beispiel &Auml;pfel.	
+German Vocab	German A2	der Bahnhof	station (duplicate)		
+German Vocab	German A2	ungew&ouml;hnlich		missing translation	
+German Vocab	German A2	Ich habe heute sehr viel zu tun und keine Zeit	a whole sentence		
+Basic	German A2	Hallo	hello		
+Basic	German A2	Tschüss	bye		
