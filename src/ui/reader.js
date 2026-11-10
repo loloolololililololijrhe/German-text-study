@@ -6,7 +6,7 @@ import { normKey } from '../lib/words.js';
 import { cleanRead, clearHard, lookedUp, markHard, pickTargets, resetWord, seen, statusOf } from '../lib/scoring.js';
 import { SentenceStream, segmentSentence } from '../lib/textparse.js';
 import { LENGTHS, LEVELS, TOPICS, buildUserPrompt } from '../lib/prompt.js';
-import { GenerationError, generateText } from '../claude.js';
+import { DEFAULT_PREFS } from '../lib/merge.js';
 import { tts } from '../tts.js';
 
 const TEXT_KEY = 'gts.text';
@@ -133,9 +133,9 @@ function renderGenerator() {
     oninput: (e) => {
       // No re-render here: replacing the form while typing would drop focus.
       const v = e.target.value.trim();
-      store.updatePrefs({ topic: v || 'surprise' });
+      store.updatePrefs({ topic: v || DEFAULT_PREFS.topic });
       for (const c of chips.children) {
-        c.setAttribute('aria-pressed', String(!v && c.dataset.topic === 'surprise'));
+        c.setAttribute('aria-pressed', String(!v && c.dataset.topic === DEFAULT_PREFS.topic));
       }
     },
   });
@@ -254,6 +254,10 @@ async function generate() {
   const mine = text;
   const stream = new SentenceStream();
   try {
+    // The Claude SDK is most of the app's size, so it is fetched on first use.
+    const { generateText } = await import('../claude.js').catch(() => {
+      throw new Error('Could not load the text writer. Check your internet connection and try again.');
+    });
     await generateText({
       apiKey: store.local.apiKey,
       model: prefs.model,
@@ -279,7 +283,7 @@ async function generate() {
         if (fresh.length) saveText();
       },
     });
-    if (!mine.sentences.length) throw new GenerationError('Claude returned an empty text. Please try again.');
+    if (!mine.sentences.length) throw new Error('Claude returned an empty text. Please try again.');
   } catch (err) {
     if (text !== mine) return;
     if (err.aborted || !mine.sentences.length) {

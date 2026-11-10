@@ -12,11 +12,18 @@ words you find hard come back more often until they stick.
    [platform.claude.com](https://platform.claude.com/settings/keys). Texts are
    written by Claude and billed to your own key. The key stays in your browser.
 3. **Read → Generate text**. Pick a topic, a length and a level first if you like.
+   With the topic **Fit the words**, Claude chooses whatever topic suits that
+   text's words best.
 4. Tap a word to see what it means. Tap the small `EN` after a sentence to
    translate the whole sentence. `Listen` reads the text aloud.
 5. Press **Done reading** when you finish.
 
 ### Your Anki deck
+
+The app ships with the Refold DE1K deck built in (997 words, in the deck's
+order) and about 1,600 common German words, cognates included, to cover what
+the deck leaves out. A word that is in both appears once, with the deck's
+wording.
 
 **Settings → Word lists → Import Anki deck** accepts an `.apkg` deck, a
 `.colpkg` collection, or a "Notes in Plain Text" export. The app suggests which
@@ -24,15 +31,16 @@ deck to take (a collection can hold several), which field is the German word
 and which field or fields hold the English meaning; check the preview, change
 them if needed, and the words are added to the list.
 
-The app also ships with about 1,600 common German words, cognates included, so
-words your deck leaves out are still covered. A word that is in both appears
-once, with your deck's wording.
+Importing your own collection also brings your Anki progress with it. With
+**Use my Anki progress** on, words whose review interval in Anki is three weeks
+or more start as known, and other reviewed words start as learning, so texts
+concentrate on what you have not learned yet. Words you have already practised
+in the app keep their scores.
 
-To make a deck the built-in default for everyone who opens the site, put its
-words in `src/data/deck.json` as `[{ "de": "der Hund", "en": "dog" }, ...]`.
-Only do this with a list you are free to publish: the repository and the site
-are public. A deck you bought belongs in the import instead, where it stays in
-your browser and your own sync gist.
+The built-in deck is `src/data/deck.json`:
+`{ "name": "...", "words": [{ "de": "der Hund", "en": "dog" }, ...] }`.
+Only put a list there that you are free to publish: the repository and the
+site are public.
 
 ### Sync between devices
 
@@ -53,10 +61,17 @@ Every word has a score, starting at 0.
 | "I know this now" | A hard word goes straight back to normal |
 
 Each new text is written around a handful of target words (8, 12 or 18,
-depending on length). Hard words get up to 60% of those places. The rest are
-drawn from every other word, where each point of score halves a word's chance
-and more common words are slightly preferred. No word's chance ever reaches
-zero, and well-known words still turn up whenever a text needs them.
+depending on length), chosen in this order:
+
+1. Hard words get up to 60% of the places, whichever list they are from.
+2. The other places go to words from your Anki deck that are not yet known.
+   Each point of score halves a word's chance, and words earlier in the deck
+   are slightly preferred.
+3. Only when no such deck words are left do the built-in common words and
+   already-known words get a turn.
+
+Words that are not targets still appear whenever a text needs them, and every
+word in a finished text is scored the same way.
 
 So a word you marked hard needs three clean reads to become normal again, and
 the **Words** tab shows every word with its score.

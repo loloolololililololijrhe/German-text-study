@@ -46,6 +46,10 @@ export function parseWordList(text, src) {
  * Combine the word sources into one list. Priority: custom (imported, edited or
  * added while reading) > default deck > built-in common words. A built-in word
  * is dropped when a higher-priority source already has it.
+ *
+ * Every entry carries `priority`: true for the learner's own words (a deck, or
+ * words added while reading), false for the built-in common words. Texts are
+ * written around priority words first.
  */
 export function buildWordIndex({ builtin = [], deck = [], custom = {} }) {
   const byId = new Map();
@@ -53,11 +57,14 @@ export function buildWordIndex({ builtin = [], deck = [], custom = {} }) {
     if (e.id && !byId.has(e.id)) byId.set(e.id, e);
   };
 
+  // An edited built-in word is stored as a custom word but is still a built-in word.
+  const builtinSrc = builtin[0]?.src;
   for (const [id, c] of Object.entries(custom)) {
-    add({ id, de: c.de, en: c.en, src: c.src || 'custom', rank: c.r ?? 1e6 });
+    const src = c.src || 'custom';
+    add({ id, de: c.de, en: c.en, src, rank: c.r ?? 1e6, priority: src !== builtinSrc });
   }
   deck.forEach((d, i) => {
-    add({ id: normKey(d.de), de: d.de, en: d.en, src: d.src || 'deck', rank: i });
+    add({ id: normKey(d.de), de: d.de, en: d.en, src: d.src || 'deck', rank: i, priority: true });
   });
 
   // A built-in word whose spelling differs from a deck word only by capital
@@ -85,7 +92,7 @@ export function buildWordIndex({ builtin = [], deck = [], custom = {} }) {
     const sameWord =
       builtinLower.get(k) === 1 &&
       (higher.get(k) || []).some((e) => !capitalising.has(e.src) || isNoun(e) === isNoun(b));
-    if (!sameWord) add(b);
+    if (!sameWord) add({ ...b, priority: false });
   }
 
   const list = [...byId.values()];

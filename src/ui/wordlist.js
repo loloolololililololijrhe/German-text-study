@@ -99,7 +99,7 @@ function update() {
       h('span', { class: 'meter-learning', style: `width:${pct(counts.learning, counts.all)}%` }),
       h('span', { class: 'meter-hard', style: `width:${pct(counts.hard, counts.all)}%` }),
     ),
-    h('p', { class: 'stat-note' }, `${met.toLocaleString('en')} of ${plural(counts.all, 'word')} met in a text so far`),
+    h('p', { class: 'stat-note' }, `${met.toLocaleString('en')} of ${plural(counts.all, 'word')} met so far`),
   );
 
   fill(

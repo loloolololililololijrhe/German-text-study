@@ -2,7 +2,7 @@
 
 import { BUILTIN_SRC, store } from '../store.js';
 import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
-import { MODELS } from '../claude.js';
+import { MODELS } from '../lib/models.js';
 import { LEVELS } from '../lib/prompt.js';
 import { tts } from '../tts.js';
 import { pickDeckFile } from './import.js';
@@ -189,7 +189,12 @@ function render() {
         h(
           'li',
           null,
-          'Each point of score halves a word’s chance of being picked. It never reaches zero, and known words still turn up whenever a text needs them.',
+          'The other places go to words from your Anki deck that you do not know yet. Each point of score halves a word’s chance of being picked.',
+        ),
+        h(
+          'li',
+          null,
+          'The built-in common words are not chosen while deck words are left to learn. They still appear whenever a text needs them, and you can tap and mark them like any other word.',
         ),
       ),
     ),

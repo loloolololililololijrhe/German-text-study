@@ -285,3 +285,36 @@ test('joinMeanings writes a shared label once and keeps different ones', () => {
   assert.equal(joinMeanings(['', undefined, 'dog']), 'dog');
   assert.equal(joinMeanings([]), '');
 });
+
+test('a collection package carries how well each word is known in Anki', () => {
+  const parsed = parseApkg(new Uint8Array(fixture('studied.colpkg')), SQL);
+  const [vocab] = parsed.noteTypes;
+  assert.equal(vocab.deck, 'Wortschatz', 'the innermost deck name is suggested');
+  // Review intervals of 60, 21, 20 and 3 days, then three unstudied notes.
+  assert.deepEqual(vocab.levels, [2, 2, 1, 1, 0, 0, 0]);
+
+  const mapping = guessMapping(vocab);
+  const { words } = extractWords(vocab, mapping.de, mapping.en);
+  assert.deepEqual(
+    words.map((w) => [w.de, w.level]),
+    [
+      ['der Bahnhof', 2],
+      ['die Zeitung', 2],
+      ['aufstehen', 1],
+      ['müde', 1],
+      ['der Schlüssel', 0],
+      ['gehen', 0],
+    ],
+  );
+});
+
+test('decks exported without scheduling, and text files, have no Anki progress', () => {
+  const apkg = parseApkg(new Uint8Array(fixture('modern.apkg')), SQL).noteTypes[0];
+  assert.ok(apkg.levels.every((l) => l === 0));
+  const text = parseAnkiText('Hund;dog\nKatze;cat\n').noteTypes[0];
+  const { words } = extractWords(text, 0, 1);
+  assert.deepEqual(
+    words.map((w) => w.level),
+    [0, 0],
+  );
+});

@@ -58,6 +58,9 @@ export function cleanField(value) {
   return s.replace(/^[;\s]+|[;\s]+$/g, '');
 }
 
+/** Anki calls a card mature once its review interval reaches three weeks. */
+const MATURE_DAYS = 21;
+
 function rows(db, sql) {
   const res = db.exec(sql);
   return res.length ? res[0].values : [];
@@ -66,7 +69,8 @@ function rows(db, sql) {
 /**
  * @param {Uint8Array} bytes  the .apkg file
  * @param {object} SQL        an initialised sql.js module
- * @returns {{noteTypes: {name:string, fields:string[], notes:string[][]}[]}}
+ * @returns {{noteTypes: {name:string, deck:string, fields:string[], notes:string[][], levels:number[]}[]}}
+ *   `levels[i]` says how well note i is known in Anki: 0 not yet, 1 learning, 2 well learned.
  */
 export function parseApkg(bytes, SQL) {
   let files;
@@ -159,12 +163,20 @@ function readCollection(db) {
   // In an unstudied deck, a card's `due` is its position in the intended order.
   const order = new Map();
   const deckOf = new Map();
+  const levelOf = new Map();
   let untouched = true;
   try {
-    const cards = rows(db, 'SELECT nid, MIN(due), MAX(type), MIN(did) FROM cards GROUP BY nid');
-    for (const [nid, due, maxType, did] of cards) {
+    // A review card's `ivl` is the days until Anki shows it again: the longer,
+    // the better the word is known. Cards being (re)learned do not count yet.
+    const cards = rows(
+      db,
+      'SELECT nid, MIN(due), MAX(type), MIN(did), MAX(CASE WHEN type = 2 THEN ivl ELSE 0 END) FROM cards GROUP BY nid',
+    );
+    for (const [nid, due, maxType, did, interval] of cards) {
       order.set(String(nid), due);
       deckOf.set(String(nid), String(did));
+      if (interval >= MATURE_DAYS) levelOf.set(String(nid), 2);
+      else if (interval > 0) levelOf.set(String(nid), 1);
       if (maxType !== 0) untouched = false;
     }
   } catch {
@@ -182,13 +194,14 @@ function readCollection(db) {
 
   const grouped = new Map();
   for (const n of notes) {
-    if (!grouped.has(n.mid)) grouped.set(n.mid, { list: [], decks: new Map() });
+    if (!grouped.has(n.mid)) grouped.set(n.mid, { list: [], levels: [], decks: new Map() });
     const g = grouped.get(n.mid);
     g.list.push(n.fields);
+    g.levels.push(levelOf.get(n.id) || 0);
     const did = deckOf.get(n.id);
     if (did) g.decks.set(did, (g.decks.get(did) || 0) + 1);
   }
-  const noteTypes = [...grouped.entries()].map(([mid, { list, decks }]) => {
+  const noteTypes = [...grouped.entries()].map(([mid, { list, levels, decks }]) => {
     const t = types.get(mid);
     const width = Math.max(...list.map((f) => f.length));
     const fields = Array.from({ length: width }, (_, i) => t?.fields[i] || `Field ${i + 1}`);
@@ -197,7 +210,7 @@ function readCollection(db) {
       .split(/\x1f|::/)
       .pop()
       .trim();
-    return { name: t?.name || 'Notes', deck, fields, notes: list };
+    return { name: t?.name || 'Notes', deck, fields, notes: list, levels };
   });
   noteTypes.sort((a, b) => b.notes.length - a.notes.length);
   if (!noteTypes.length) throw new Error('This deck has no notes in it.');
@@ -405,6 +418,7 @@ export function joinMeanings(values) {
  * Turn mapped notes into word pairs, in deck order, dropping what cannot be
  * used. `enIndexes` is one field index or several, whose values are joined.
  * A word that appears twice is kept once, with the fuller of its meanings.
+ * Each word carries `level`, how well it is known in Anki (0, 1 or 2).
  */
 export function extractWords(noteType, deIndex, enIndexes) {
   const enList = [enIndexes].flat();
@@ -412,9 +426,10 @@ export function extractWords(noteType, deIndex, enIndexes) {
   const at = new Map();
   const skipped = { empty: 0, long: 0, duplicate: 0 };
   const senses = (en) => en.split(';').length;
-  for (const n of noteType.notes) {
+  noteType.notes.forEach((n, row) => {
     const de = n[deIndex] || '';
     const en = joinMeanings(enList.map((i) => n[i]));
+    const level = noteType.levels?.[row] || 0;
     const id = normKey(de);
     if (!id || !en) skipped.empty++;
     else if (id.split(' ').length > 5) skipped.long++;
@@ -422,10 +437,11 @@ export function extractWords(noteType, deIndex, enIndexes) {
       skipped.duplicate++;
       const first = words[at.get(id)];
       if (senses(en) > senses(first.en)) first.en = en;
+      first.level = Math.max(first.level, level);
     } else {
       at.set(id, words.length);
-      words.push({ de, en });
+      words.push({ de, en, level });
     }
-  }
+  });
   return { words, skipped };
 }

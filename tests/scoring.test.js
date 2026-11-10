@@ -6,6 +6,7 @@ import {
   MAX_SCORE,
   MIN_SCORE,
   cleanRead,
+  fromAnki,
   clearHard,
   markHard,
   markKnown,
@@ -147,4 +148,70 @@ test('pickTargets copes with a list smaller than the request', () => {
   const list = words(4);
   const picked = pickTargets(list, { w0: markHard(undefined, 1) }, 12, rng(1));
   assert.equal(picked.length, 4);
+});
+
+// ---- the learner's own deck comes first ---------------------------------------
+
+/** `own` deck words followed by `builtin` common words. */
+function mixed(own, builtin) {
+  return [
+    ...Array.from({ length: own }, (_, i) => ({ id: `d${i}`, de: `d${i}`, en: '', rank: i, priority: true })),
+    ...Array.from({ length: builtin }, (_, i) => ({ id: `b${i}`, de: `b${i}`, en: '', rank: i, priority: false })),
+  ];
+}
+
+test('deck words fill every slot while there are deck words left to learn', () => {
+  const list = mixed(300, 1500);
+  const r = rng(21);
+  for (let i = 0; i < 50; i++) {
+    const picked = pickTargets(list, {}, 12, r);
+    assert.equal(picked.length, 12);
+    assert.ok(
+      picked.every((p) => p.entry.priority),
+      `round ${i} picked a built-in word`,
+    );
+  }
+});
+
+test('built-in words are used only for the slots the deck cannot fill', () => {
+  const list = mixed(5, 500);
+  const picked = pickTargets(list, {}, 12, rng(22));
+  assert.equal(picked.filter((p) => p.entry.priority).length, 5);
+  assert.equal(picked.filter((p) => !p.entry.priority).length, 7);
+});
+
+test('deck words that are already known make room for the rest', () => {
+  const list = mixed(40, 500);
+  const progress = {};
+  for (let i = 0; i < 37; i++) progress[`d${i}`] = { s: KNOWN_AT, n: 3, l: 0, t: 0, u: 1 };
+  const r = rng(23);
+  for (let i = 0; i < 20; i++) {
+    const ids = pickTargets(list, progress, 8, r).map((p) => p.entry.id);
+    for (const id of ['d37', 'd38', 'd39']) assert.ok(ids.includes(id), `${id} missing`);
+    assert.equal(ids.length, 8);
+  }
+});
+
+test('a hard word comes back whichever list it is from', () => {
+  const list = mixed(300, 500);
+  const progress = { b7: markHard(undefined, 1) };
+  const r = rng(24);
+  for (let i = 0; i < 20; i++) {
+    const picked = pickTargets(list, progress, 10, r);
+    assert.ok(picked.some((p) => p.entry.id === 'b7' && p.hard));
+    assert.equal(picked.filter((p) => !p.entry.priority).length, 1, 'no other built-in word is chosen');
+  }
+});
+
+test('without a deck, the built-in words are chosen as before', () => {
+  const picked = pickTargets(mixed(0, 500), {}, 12, rng(25));
+  assert.equal(picked.length, 12);
+});
+
+test('Anki progress gives a starting score without counting as read here', () => {
+  const known = fromAnki(2, 5);
+  const learning = fromAnki(1, 5);
+  assert.equal(statusOf(known), 'known');
+  assert.equal(statusOf(learning), 'learning');
+  assert.deepEqual(learning, { s: 1, n: 0, l: 0, t: 0, u: 5 });
 });

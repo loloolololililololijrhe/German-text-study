@@ -14,6 +14,12 @@ export const LENGTHS = {
 };
 
 export const TOPICS = [
+  {
+    id: 'fit',
+    label: 'Fit the words',
+    brief:
+      'your choice. Look at the target words first and pick the setting and storyline in which they belong together most naturally, so that none of them feels forced in',
+  },
   { id: 'surprise', label: 'Surprise me', brief: '' },
   { id: 'daily', label: 'Daily life', brief: 'an everyday situation at home or around town' },
   { id: 'travel', label: 'Travel', brief: 'travelling: transport, a trip, or finding your way somewhere' },

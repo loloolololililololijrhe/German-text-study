@@ -3,12 +3,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { SYSTEM_PROMPT, TEXT_SCHEMA } from './lib/prompt.js';
-
-export const MODELS = [
-  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (best writing)', fallback: true },
-  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (faster, cheaper)', fallback: true },
-  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fastest, cheapest)', fallback: false },
-];
+import { MODELS } from './lib/models.js';
 
 export class GenerationError extends Error {
   constructor(message, { aborted = false } = {}) {

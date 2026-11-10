@@ -1,6 +1,8 @@
 // Importing an Anki deck: pick a file, confirm which fields are which, add.
 
 import { store } from '../store.js';
+import { normKey } from '../lib/words.js';
+import { fromAnki } from '../lib/scoring.js';
 import { fill, h, plural, toast } from './dom.js';
 import { bestNoteType, extractWords, fieldChoices, guessMapping, parseAnkiText, parseApkg } from '../lib/anki.js';
 
@@ -57,6 +59,7 @@ function openMapping(parsed, fileName) {
   let mapping = guessMapping(parsed.noteTypes[typeIndex]);
   const suggestedName = () => parsed.noteTypes[typeIndex].deck || fileName;
   let nameEdited = false;
+  let useProgress = true;
   const nameInput = h('input', {
     class: 'input',
     type: 'text',
@@ -82,6 +85,15 @@ function openMapping(parsed, fileName) {
     const choices = fieldChoices(type);
     const enChoice = choices.findIndex((c) => c.fields.join() === mapping.en.join());
     const { words, skipped } = extractWords(type, mapping.de, mapping.en);
+    const listed = words.map((w, i) => ({ ...w, id: normKey(w.de), rank: i }));
+    // A deck word the list already holds, word for word, needs no second copy.
+    const fresh = listed.filter((w) => {
+      const e = store.index.byId.get(w.id);
+      return !(e && e.priority && e.de === w.de && e.en === w.en);
+    });
+    const already = listed.length - fresh.length;
+    const known = listed.filter((w) => w.level === 2).length;
+    const learning = listed.filter((w) => w.level === 1).length;
     const dropped = skipped.empty + skipped.long + skipped.duplicate;
     const reasons = [
       skipped.empty && `${skipped.empty} with an empty field`,
@@ -130,6 +142,30 @@ function openMapping(parsed, fileName) {
           ),
         ),
       ),
+      known + learning > 0 &&
+        h(
+          'label',
+          { class: 'switch-row' },
+          h(
+            'span',
+            null,
+            h('span', { class: 'switch-title' }, 'Use my Anki progress'),
+            h(
+              'span',
+              { class: 'help' },
+              `${plural(known, 'word')} you know well in Anki will start as known and ${learning.toLocaleString('en')} you are still learning as learning, so texts concentrate on the rest. Words you have already practised here keep their scores.`,
+            ),
+          ),
+          h('input', {
+            class: 'switch',
+            type: 'checkbox',
+            role: 'switch',
+            checked: useProgress,
+            onchange: (e) => {
+              useProgress = e.target.checked;
+            },
+          }),
+        ),
       h(
         'div',
         { class: 'preview' },
@@ -159,7 +195,8 @@ function openMapping(parsed, fileName) {
       h(
         'p',
         { class: 'dialog-note' },
-        `${plural(words.length, 'word')} will be added.`,
+        `${plural(fresh.length, 'word')} will be added.`,
+        already ? ` ${already.toLocaleString('en')} are already in your list.` : '',
         dropped ? ` Skipping ${reasons.join(', ')}.` : '',
         ' Words you already have keep their scores.',
       ),
@@ -175,9 +212,25 @@ function openMapping(parsed, fileName) {
             disabled: !words.length,
             onclick: () => {
               const src = nameInput.value.trim() || 'Imported deck';
-              const n = store.addCustom(words.map((w, i) => ({ ...w, src, rank: i })));
+              const added = fresh.length
+                ? store.addCustom(fresh.map((w) => ({ de: w.de, en: w.en, src, rank: w.rank })))
+                : 0;
+              // Anki progress only fills in words this app knows nothing about yet.
+              const updates = {};
+              if (useProgress) {
+                const now = Date.now();
+                for (const w of listed) {
+                  if (w.level && !store.progressOf(w.id)) updates[w.id] = fromAnki(w.level, now);
+                }
+              }
+              const marked = Object.keys(updates).length;
+              if (marked) store.setProgressMany(updates);
               dialog.close();
-              toast(`Imported ${plural(n, 'word')}`);
+              toast(
+                [added && `Imported ${plural(added, 'word')}`, marked && `${plural(marked, 'word')} marked from Anki`]
+                  .filter(Boolean)
+                  .join(' · ') || 'Nothing new to import',
+              );
               store.syncNow();
             },
           },

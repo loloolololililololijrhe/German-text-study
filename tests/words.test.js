@@ -107,3 +107,18 @@ test('in a deck that uses capitals, a lower-case verb does not replace a built-i
   assert.equal(index.find('die Miete').en, 'Noun: rent');
   assert.equal(index.list.length, 6);
 });
+
+test("deck words are marked as the learner's own; built-in words are not, even when edited", () => {
+  const builtin = parseWordList('gehen = to go\ndas Haus = house\nund = and', 'Common words');
+  const index = buildWordIndex({
+    builtin,
+    deck: [{ de: 'das Jahr', en: 'year', src: 'My deck' }],
+    custom: {
+      gehen: { de: 'gehen', en: 'Verb: to go', src: 'My deck', r: 0 },
+      Haus: { de: 'das Haus', en: 'house, home', src: 'Common words', r: 1 }, // an edited meaning
+      Zug: { de: 'der Zug', en: 'train', src: 'Added while reading', r: 2000 },
+    },
+  });
+  const priority = Object.fromEntries(index.list.map((e) => [e.id, e.priority]));
+  assert.deepEqual(priority, { gehen: true, Haus: false, Zug: true, Jahr: true, und: false });
+});

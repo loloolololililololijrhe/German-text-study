@@ -13,10 +13,12 @@ import defaultDeck from './data/deck.json';
 const STATE_KEY = 'gts.state';
 const LOCAL_KEY = 'gts.local';
 export const BUILTIN_SRC = 'Common words';
-export const DECK_SRC = 'Default deck';
+// deck.json is either a plain list of words or { name, words }.
+const deckWords = Array.isArray(defaultDeck) ? defaultDeck : defaultDeck.words || [];
+export const DECK_SRC = (!Array.isArray(defaultDeck) && defaultDeck.name) || 'Default deck';
 
 const builtin = parseWordList([common1, common2, common3, common4].join('\n'), BUILTIN_SRC);
-const deck = defaultDeck.map((d) => ({ ...d, src: DECK_SRC }));
+const deck = deckWords.map((d) => ({ de: d.de, en: d.en, src: DECK_SRC }));
 
 function read(key) {
   try {

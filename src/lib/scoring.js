@@ -89,24 +89,44 @@ export function weightedSample(items, k, rng = Math.random) {
 }
 
 /**
- * Choose the words the next text is written around. Hard words get their own
- * share of the slots so they are not drowned out by thousands of unseen words;
- * the rest go to everything else, weighted by score and frequency.
+ * A starting point for a word already studied in Anki: 2 = well learned
+ * (starts as known), 1 = still being learned (starts as learning).
+ */
+export function fromAnki(level, now) {
+  return { ...blank(), s: level >= 2 ? KNOWN_AT : 1, u: now };
+}
+
+/**
+ * Choose the words the next text is written around.
+ *
+ * 1. Hard words get their own share of the slots, so they are not drowned out
+ *    by thousands of unseen words.
+ * 2. The other slots go to priority words (the learner's own deck) that are
+ *    not yet known, weighted by score and frequency.
+ * 3. Only when those run out do the remaining words get a turn: the built-in
+ *    common words and deck words that are already known. Until then they
+ *    simply appear whenever a text needs them.
  */
 export function pickTargets(entries, progress, count, rng = Math.random) {
   const hard = [];
+  const first = [];
   const rest = [];
   for (const e of entries) {
     const p = progress[e.id];
+    const s = p?.s ?? 0;
     const item = { e, w: weightOf(e, p) };
-    if ((p?.s ?? 0) < 0) hard.push(item);
+    if (s < 0) hard.push(item);
+    else if (e.priority && s < KNOWN_AT) first.push(item);
     else rest.push(item);
   }
   let hardN = Math.min(hard.length, Math.round(count * HARD_SHARE));
-  const restN = Math.min(rest.length, count - hardN);
-  hardN = Math.min(hard.length, count - restN);
+  const others = Math.min(first.length + rest.length, count - hardN);
+  hardN = Math.min(hard.length, count - others);
+  const firstN = Math.min(first.length, others);
+  const plain = (x) => ({ entry: x.e, hard: false });
   return [
     ...weightedSample(hard, hardN, rng).map((x) => ({ entry: x.e, hard: true })),
-    ...weightedSample(rest, restN, rng).map((x) => ({ entry: x.e, hard: false })),
+    ...weightedSample(first, firstN, rng).map(plain),
+    ...weightedSample(rest, others - firstN, rng).map(plain),
   ];
 }

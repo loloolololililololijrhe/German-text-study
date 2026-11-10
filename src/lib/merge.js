@@ -7,7 +7,7 @@
 export const DEFAULT_PREFS = {
   level: 'A2',
   length: 'medium',
-  topic: 'surprise',
+  topic: 'fit',
   model: 'claude-opus-5-5',
   autoHard: true,
   rate: 0.85,
