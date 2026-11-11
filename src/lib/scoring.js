@@ -10,8 +10,8 @@
 // score, so hard words come back often and familiar words fade out. Nothing
 // ever reaches zero weight, so every word stays learnable.
 
-/** The hardest a word can get: marking it hard again never takes it below this. */
-export const MIN_SCORE = -4;
+/** The limits a score is stored within. */
+export const MIN_SCORE = -6;
 export const MAX_SCORE = 6;
 
 /**
@@ -19,7 +19,13 @@ export const MAX_SCORE = 6;
  * many clean reads it then needs to count as normal again.
  */
 export const DEFAULT_HARD_STEP = 2;
-export const HARD_STEPS = [1, 2, 3, 4];
+
+/**
+ * The hardest a word can get: marking it hard again never takes it further
+ * below zero than this. The learner can change it in Settings.
+ */
+export const DEFAULT_MAX_HARD = 4;
+export const MAX_HARD_CHOICES = [1, 2, 3, 4, 5, 6];
 export const KNOWN_AT = 3;
 
 /** Share of a text's target words reserved for hard words, when there are enough. */
@@ -35,17 +41,44 @@ export function statusOf(p) {
   return 'new';
 }
 
-/** The learner's chosen step: within the choices, and the default if nothing usable is stored. */
-export function hardStepOf(prefs) {
-  const n = Math.round(Number(prefs?.hardStep));
-  if (!(n >= 1)) return DEFAULT_HARD_STEP;
-  return Math.min(n, HARD_STEPS.at(-1));
+/** The learner's limit on hardness, or the default if nothing usable is stored. */
+export function maxHardOf(prefs) {
+  const n = Math.round(Number(prefs?.maxHard));
+  if (!(n >= 1)) return DEFAULT_MAX_HARD;
+  return Math.min(n, MAX_HARD_CHOICES.at(-1));
 }
 
-/** The learner flagged the word. Flagging an already-hard word makes it harder. */
-export function markHard(p, now, step = DEFAULT_HARD_STEP) {
+/** The learner's chosen step. It cannot be larger than the limit on hardness. */
+export function hardStepOf(prefs) {
+  const max = maxHardOf(prefs);
+  const n = Math.round(Number(prefs?.hardStep));
+  return Math.min(n >= 1 ? n : DEFAULT_HARD_STEP, max);
+}
+
+/** The steps offered in Settings: 1 up to the limit on hardness. */
+export function hardStepChoices(prefs) {
+  return MAX_HARD_CHOICES.filter((n) => n <= maxHardOf(prefs));
+}
+
+/**
+ * The learner flagged the word. Flagging an already-hard word makes it
+ * harder, but never further below zero than `maxHard`.
+ */
+export function markHard(p, now, step = DEFAULT_HARD_STEP, maxHard = DEFAULT_MAX_HARD) {
   const b = p || blank();
-  return { ...b, s: Math.max(MIN_SCORE, Math.min(b.s, 0) - step), l: b.l + 1, u: now };
+  return { ...b, s: Math.max(-maxHard, Math.min(b.s, 0) - step), l: b.l + 1, u: now };
+}
+
+/**
+ * When the limit on hardness is lowered, words already harder than it are
+ * eased to the new limit. Returns only the entries that change.
+ */
+export function capHardness(progress, maxHard, now) {
+  const updates = {};
+  for (const [id, p] of Object.entries(progress)) {
+    if (p.s < -maxHard) updates[id] = { ...p, s: -maxHard, u: now };
+  }
+  return updates;
 }
 
 /** The word appeared in a finished text and was not tapped. */

@@ -4,7 +4,7 @@ import { BUILTIN_SRC, store } from '../store.js';
 import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
 import { MODELS } from '../lib/models.js';
 import { LEVELS } from '../lib/prompt.js';
-import { HARD_SHARE, HARD_STEPS, MIN_SCORE, hardStepOf } from '../lib/scoring.js';
+import { HARD_SHARE, MAX_HARD_CHOICES, hardStepChoices, hardStepOf, maxHardOf } from '../lib/scoring.js';
 import { tts } from '../tts.js';
 import { pickDeckFile } from './import.js';
 
@@ -16,6 +16,7 @@ let sourcesEl;
 let syncEl;
 let voiceEl;
 let rulesEl;
+let hardEl;
 
 export function mountSettings(el) {
   root = el;
@@ -42,6 +43,7 @@ function render() {
   syncEl = h('div');
   voiceEl = h('div');
   rulesEl = h('ul', { class: 'help-list' });
+  hardEl = h('div');
 
   const keyInput = h('input', {
     class: 'input',
@@ -133,33 +135,7 @@ function render() {
           onchange: (e) => store.updatePrefs({ autoHard: e.target.checked }),
         }),
       ),
-      h(
-        'label',
-        { class: 'field' },
-        h('span', { class: 'label' }, 'A hard word is normal again after'),
-        h(
-          'select',
-          {
-            class: 'input',
-            onchange: (e) => {
-              store.updatePrefs({ hardStep: Number(e.target.value) });
-              drawRules();
-            },
-          },
-          HARD_STEPS.map((n) =>
-            h(
-              'option',
-              { value: String(n), selected: n === hardStepOf(prefs) },
-              `${n} clean ${n === 1 ? 'read' : 'reads'}`,
-            ),
-          ),
-        ),
-        h(
-          'span',
-          { class: 'help' },
-          `Marking a word hard lowers its score by this much, and every text you read it in without tapping raises it by 1. A higher number repeats each hard word more, but fewer new words fit in. Marking a word again makes it harder, down to ${MIN_SCORE} at most. Applies to words you mark from now on.`,
-        ),
-      ),
+      hardEl,
       h(
         'label',
         { class: 'switch-row' },
@@ -249,25 +225,84 @@ function render() {
   drawSources();
   drawSync();
   drawVoices();
+  drawHardness();
   drawRules();
+}
+
+const reads = (n) => `${n} clean ${n === 1 ? 'read' : 'reads'}`;
+
+/** The two hardness settings. The step can never be larger than the limit. */
+function drawHardness() {
+  if (!hardEl) return;
+  const prefs = store.state.prefs;
+  const step = hardStepOf(prefs);
+  const max = maxHardOf(prefs);
+  const select = (choices, current, onPick, label) =>
+    h(
+      'select',
+      { class: 'input', 'aria-label': label, onchange: (e) => onPick(Number(e.target.value)) },
+      choices.map((n) => h('option', { value: String(n), selected: n === current }, reads(n))),
+    );
+  fill(
+    hardEl,
+    h(
+      'label',
+      { class: 'field' },
+      h('span', { class: 'label' }, 'A hard word is normal again after'),
+      select(
+        hardStepChoices(prefs),
+        step,
+        (n) => {
+          store.updatePrefs({ hardStep: n });
+          drawRules();
+        },
+        'Clean reads for a hard word',
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        'Marking a word hard lowers its score by this much, and every text you read it in without tapping raises it by 1. A higher number repeats each hard word more, but fewer new words fit in. Applies to words you mark from now on.',
+      ),
+    ),
+    h(
+      'label',
+      { class: 'field' },
+      h('span', { class: 'label' }, 'The hardest a word can get'),
+      select(
+        MAX_HARD_CHOICES,
+        max,
+        (n) => {
+          store.updatePrefs({ maxHard: n, hardStep: Math.min(step, n) });
+          drawHardness();
+          drawRules();
+        },
+        'Most clean reads a word can need',
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        'Marking a hard word again makes it harder, but it never needs more clean reads than this. Lowering it also eases words that are already harder.',
+      ),
+    ),
+  );
 }
 
 function drawRules() {
   if (!rulesEl) return;
   const step = hardStepOf(store.state.prefs);
-  const reads = step === 1 ? 'one clean read' : `${step} clean reads`;
+  const max = maxHardOf(store.state.prefs);
   fill(
     rulesEl,
     h('li', null, 'Every word has a score. New words start at 0.'),
     h(
       'li',
       null,
-      `Marking a word hard drops its score by ${step}, and never below ${MIN_SCORE}. Hard words get up to ${Math.round(HARD_SHARE * 100)}% of the places in each new text.`,
+      `Marking a word hard drops its score by ${step}, and marking it again drops it further, but never below −${max}. Hard words get up to ${Math.round(HARD_SHARE * 100)}% of the places in each new text.`,
     ),
     h(
       'li',
       null,
-      `Each time you finish a text, every word in it that you did not tap goes up by 1. So a hard word needs ${reads} to become normal again.`,
+      `Each time you finish a text, every word in it that you did not tap goes up by 1. So a hard word needs ${reads(step)} to become normal again, and never more than ${max}.`,
     ),
     h(
       'li',

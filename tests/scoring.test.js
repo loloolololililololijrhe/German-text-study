@@ -2,17 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_HARD_STEP,
+  DEFAULT_MAX_HARD,
   HARD_SHARE,
-  HARD_STEPS,
+  MAX_HARD_CHOICES,
   KNOWN_AT,
   MAX_SCORE,
   MIN_SCORE,
+  capHardness,
   cleanRead,
   fromAnki,
+  hardStepChoices,
   hardStepOf,
   clearHard,
   markHard,
   markKnown,
+  maxHardOf,
   pickTargets,
   seen,
   statusOf,
@@ -30,40 +34,59 @@ function rng(seed = 1) {
 
 const words = (n) => Array.from({ length: n }, (_, i) => ({ id: `w${i}`, de: `w${i}`, en: '', rank: i }));
 
-test('marking hard lowers the score by the chosen step, and repeated marks stop at the floor', () => {
+test('marking hard lowers the score by the chosen step, and repeated marks stop at the limit', () => {
   let p = markHard(undefined, 1, 3);
   assert.equal(p.s, -3);
   assert.equal(statusOf(p), 'hard');
   p = markHard(p, 2, 3);
-  assert.equal(p.s, -4, 'a second mark would reach -6 but the floor is -4');
+  assert.equal(p.s, -4, 'a second mark would reach -6 but the default limit is 4');
   p = markHard(p, 3, 3);
   assert.equal(p.s, -4);
-  assert.equal(MIN_SCORE, -4);
+  assert.equal(DEFAULT_MAX_HARD, 4);
 });
 
-test('whatever the step, a word is never harder than the floor', () => {
-  for (const step of HARD_STEPS) {
+test('the limit on hardness is whatever the learner sets, from 1 to 6', () => {
+  assert.deepEqual(MAX_HARD_CHOICES, [1, 2, 3, 4, 5, 6]);
+  for (const max of MAX_HARD_CHOICES) {
     let p;
-    for (let i = 0; i < 6; i++) p = markHard(p, i, step);
-    assert.equal(p.s, MIN_SCORE, `step ${step}`);
-    // So it never needs more clean reads than the floor is deep.
-    for (let i = 0; i < -MIN_SCORE; i++) p = cleanRead(p, 10 + i);
+    for (let i = 0; i < 8; i++) p = markHard(p, i, 2, max);
+    assert.equal(p.s, -max, `limit ${max}`);
+    // So a word never needs more clean reads than the limit.
+    for (let i = 0; i < max; i++) p = cleanRead(p, 10 + i);
     assert.equal(p.s, 0);
   }
+  assert.equal(maxHardOf({ maxHard: 6 }), 6);
+  assert.equal(maxHardOf({ maxHard: '2' }), 2);
+  assert.equal(maxHardOf({ maxHard: 40 }), 6);
+  for (const bad of [undefined, null, {}, { maxHard: 0 }, { maxHard: 'x' }]) assert.equal(maxHardOf(bad), 4);
+  assert.equal(MIN_SCORE, -6, 'stored scores allow for the largest limit');
 });
 
-test('the step is 2 unless the learner chooses another, from 1 to 4', () => {
+test('the step is 2 unless the learner chooses another, and never more than the limit', () => {
   assert.equal(DEFAULT_HARD_STEP, 2);
-  assert.deepEqual(HARD_STEPS, [1, 2, 3, 4]);
   assert.equal(markHard(undefined, 1).s, -2);
-  for (const step of HARD_STEPS) assert.equal(markHard(undefined, 1, step).s, -step);
   assert.equal(hardStepOf({ hardStep: 4 }), 4);
   assert.equal(hardStepOf({ hardStep: '3' }), 3);
-  // A step saved when 5 was still a choice is brought down to the largest one.
-  assert.equal(hardStepOf({ hardStep: 5 }), 4);
+  assert.equal(hardStepOf({ hardStep: 5 }), 4, 'cut to the default limit of 4');
+  assert.equal(hardStepOf({ hardStep: 5, maxHard: 6 }), 5);
+  assert.equal(hardStepOf({ hardStep: 4, maxHard: 3 }), 3);
+  assert.equal(hardStepOf({ maxHard: 1 }), 1, 'the default step also respects the limit');
   for (const bad of [undefined, null, {}, { hardStep: 0 }, { hardStep: -2 }, { hardStep: 'x' }]) {
     assert.equal(hardStepOf(bad), DEFAULT_HARD_STEP);
   }
+  assert.deepEqual(hardStepChoices({}), [1, 2, 3, 4]);
+  assert.deepEqual(hardStepChoices({ maxHard: 2 }), [1, 2]);
+  assert.deepEqual(hardStepChoices({ maxHard: 6 }), [1, 2, 3, 4, 5, 6]);
+});
+
+test('lowering the limit eases the words that were already beyond it, and only those', () => {
+  const progress = {
+    a: { s: -6, n: 1, l: 3, t: 5, u: 5 },
+    b: { s: -3, n: 0, l: 1, t: 0, u: 5 },
+    c: { s: 2, n: 2, l: 0, t: 5, u: 5 },
+  };
+  assert.deepEqual(capHardness(progress, 3, 9), { a: { s: -3, n: 1, l: 3, t: 5, u: 9 } });
+  assert.deepEqual(capHardness(progress, 6, 9), {});
 });
 
 test('marking a familiar word hard starts from zero, not from its old score', () => {
@@ -72,7 +95,7 @@ test('marking a familiar word hard starts from zero, not from its old score', ()
 });
 
 test('a hard word fades back to normal after as many clean reads as the step', () => {
-  for (const step of HARD_STEPS) {
+  for (const step of [1, 2, 3, 4]) {
     let p = markHard(undefined, 1, step);
     for (let i = 1; i < step; i++) {
       p = cleanRead(p, 1 + i);

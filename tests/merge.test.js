@@ -81,9 +81,9 @@ test('stableStringify ignores key order', () => {
   assert.equal(stableStringify({ b: 1, a: { d: [1, 2], c: 2 } }), stableStringify({ a: { c: 2, d: [1, 2] }, b: 1 }));
 });
 
-test('scores saved under wider limits are brought back inside the current ones', () => {
-  const s = sanitizeState({ progress: { Hund: { s: -6, n: 2 }, Katze: { s: 99 }, Maus: { s: -2 } } });
-  assert.equal(s.progress.Hund.s, -4);
+test('scores outside the stored range are brought back inside it', () => {
+  const s = sanitizeState({ progress: { Hund: { s: -9, n: 2 }, Katze: { s: 99 }, Maus: { s: -5 } } });
+  assert.equal(s.progress.Hund.s, -6);
   assert.equal(s.progress.Katze.s, 6);
-  assert.equal(s.progress.Maus.s, -2);
+  assert.equal(s.progress.Maus.s, -5);
 });

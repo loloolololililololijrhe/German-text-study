@@ -9,6 +9,7 @@ import {
   hardStepOf,
   lookedUp,
   markHard,
+  maxHardOf,
   pickTargets,
   resetWord,
   seen,
@@ -487,7 +488,8 @@ function flag(word) {
   const before = store.progressOf(entry.id) || null;
   text.hard[entry.id] = before;
   text.tapped[entry.id] = true;
-  store.setProgress(entry.id, markHard(before, Date.now(), hardStepOf(store.state.prefs)));
+  const prefs = store.state.prefs;
+  store.setProgress(entry.id, markHard(before, Date.now(), hardStepOf(prefs), maxHardOf(prefs)));
   saveText();
 }
 

@@ -3,6 +3,7 @@
 
 import { buildWordIndex, normKey, parseWordList } from './lib/words.js';
 import { emptyState, mergeStates, sanitizeState, stableStringify } from './lib/merge.js';
+import { capHardness, maxHardOf } from './lib/scoring.js';
 import { createGist, findGist, readGist, writeGist } from './gist.js';
 import common1 from './data/common-1.txt?raw';
 import common2 from './data/common-2.txt?raw';
@@ -72,6 +73,9 @@ export const store = {
 
   updatePrefs(patch) {
     this.state.prefs = { ...this.state.prefs, ...patch, u: Date.now() };
+    // A lower limit on hardness also eases the words that were already beyond it.
+    if ('maxHard' in patch)
+      Object.assign(this.state.progress, capHardness(this.state.progress, maxHardOf(this.state.prefs), Date.now()));
     persist();
     this.emit('prefs');
     this.syncSoon();
@@ -164,6 +168,8 @@ export const store = {
         const remoteRaw = await readGist(token, id);
         const remote = remoteRaw ? sanitizeState(remoteRaw) : emptyState();
         const merged = mergeStates(this.state, remote);
+        // Another device may still have had a higher limit on hardness.
+        Object.assign(merged.progress, capHardness(merged.progress, maxHardOf(merged.prefs), Date.now()));
         const mergedText = stableStringify(merged);
         if (mergedText !== stableStringify(this.state)) {
           this.state = merged;

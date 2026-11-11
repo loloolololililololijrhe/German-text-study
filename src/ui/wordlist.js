@@ -2,7 +2,7 @@
 
 import { store } from '../store.js';
 import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
-import { clearHard, hardStepOf, markHard, markKnown, resetWord, statusOf } from '../lib/scoring.js';
+import { clearHard, hardStepOf, markHard, markKnown, maxHardOf, resetWord, statusOf } from '../lib/scoring.js';
 import { tts } from '../tts.js';
 
 const PAGE = 80;
@@ -257,7 +257,7 @@ function openDetail(id) {
               {
                 class: 'btn btn-hard',
                 type: 'button',
-                onclick: () => set(markHard(p, now, hardStepOf(store.state.prefs))),
+                onclick: () => set(markHard(p, now, hardStepOf(store.state.prefs), maxHardOf(store.state.prefs))),
               },
               icon('flag', 18),
               'Mark as hard',
