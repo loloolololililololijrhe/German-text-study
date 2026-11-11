@@ -30,23 +30,38 @@ function rng(seed = 1) {
 
 const words = (n) => Array.from({ length: n }, (_, i) => ({ id: `w${i}`, de: `w${i}`, en: '', rank: i }));
 
-test('marking hard lowers the score by the chosen step, and repeated marks go lower, to a floor', () => {
+test('marking hard lowers the score by the chosen step, and repeated marks stop at the floor', () => {
   let p = markHard(undefined, 1, 3);
   assert.equal(p.s, -3);
   assert.equal(statusOf(p), 'hard');
   p = markHard(p, 2, 3);
-  assert.equal(p.s, -6);
+  assert.equal(p.s, -4, 'a second mark would reach -6 but the floor is -4');
   p = markHard(p, 3, 3);
-  assert.equal(p.s, MIN_SCORE);
+  assert.equal(p.s, -4);
+  assert.equal(MIN_SCORE, -4);
 });
 
-test('the step is 2 unless the learner chooses another, from 1 to 5', () => {
+test('whatever the step, a word is never harder than the floor', () => {
+  for (const step of HARD_STEPS) {
+    let p;
+    for (let i = 0; i < 6; i++) p = markHard(p, i, step);
+    assert.equal(p.s, MIN_SCORE, `step ${step}`);
+    // So it never needs more clean reads than the floor is deep.
+    for (let i = 0; i < -MIN_SCORE; i++) p = cleanRead(p, 10 + i);
+    assert.equal(p.s, 0);
+  }
+});
+
+test('the step is 2 unless the learner chooses another, from 1 to 4', () => {
   assert.equal(DEFAULT_HARD_STEP, 2);
+  assert.deepEqual(HARD_STEPS, [1, 2, 3, 4]);
   assert.equal(markHard(undefined, 1).s, -2);
   for (const step of HARD_STEPS) assert.equal(markHard(undefined, 1, step).s, -step);
   assert.equal(hardStepOf({ hardStep: 4 }), 4);
   assert.equal(hardStepOf({ hardStep: '3' }), 3);
-  for (const bad of [undefined, null, {}, { hardStep: 0 }, { hardStep: 9 }, { hardStep: 'x' }]) {
+  // A step saved when 5 was still a choice is brought down to the largest one.
+  assert.equal(hardStepOf({ hardStep: 5 }), 4);
+  for (const bad of [undefined, null, {}, { hardStep: 0 }, { hardStep: -2 }, { hardStep: 'x' }]) {
     assert.equal(hardStepOf(bad), DEFAULT_HARD_STEP);
   }
 });

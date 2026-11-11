@@ -4,7 +4,7 @@ import { BUILTIN_SRC, store } from '../store.js';
 import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
 import { MODELS } from '../lib/models.js';
 import { LEVELS } from '../lib/prompt.js';
-import { HARD_SHARE, HARD_STEPS, hardStepOf } from '../lib/scoring.js';
+import { HARD_SHARE, HARD_STEPS, MIN_SCORE, hardStepOf } from '../lib/scoring.js';
 import { tts } from '../tts.js';
 import { pickDeckFile } from './import.js';
 
@@ -157,7 +157,7 @@ function render() {
         h(
           'span',
           { class: 'help' },
-          'Marking a word hard lowers its score by this much, and every text you read it in without tapping raises it by 1. A higher number repeats each hard word more, but fewer new words fit in. Applies to words you mark from now on.',
+          `Marking a word hard lowers its score by this much, and every text you read it in without tapping raises it by 1. A higher number repeats each hard word more, but fewer new words fit in. Marking a word again makes it harder, down to ${MIN_SCORE} at most. Applies to words you mark from now on.`,
         ),
       ),
       h(
@@ -262,7 +262,7 @@ function drawRules() {
     h(
       'li',
       null,
-      `Marking a word hard drops its score by ${step}. Hard words get up to ${Math.round(HARD_SHARE * 100)}% of the places in each new text.`,
+      `Marking a word hard drops its score by ${step}, and never below ${MIN_SCORE}. Hard words get up to ${Math.round(HARD_SHARE * 100)}% of the places in each new text.`,
     ),
     h(
       'li',

@@ -10,7 +10,8 @@
 // score, so hard words come back often and familiar words fade out. Nothing
 // ever reaches zero weight, so every word stays learnable.
 
-export const MIN_SCORE = -6;
+/** The hardest a word can get: marking it hard again never takes it below this. */
+export const MIN_SCORE = -4;
 export const MAX_SCORE = 6;
 
 /**
@@ -18,7 +19,7 @@ export const MAX_SCORE = 6;
  * many clean reads it then needs to count as normal again.
  */
 export const DEFAULT_HARD_STEP = 2;
-export const HARD_STEPS = [1, 2, 3, 4, 5];
+export const HARD_STEPS = [1, 2, 3, 4];
 export const KNOWN_AT = 3;
 
 /** Share of a text's target words reserved for hard words, when there are enough. */
@@ -34,10 +35,11 @@ export function statusOf(p) {
   return 'new';
 }
 
-/** The learner's chosen step, or the default if the stored value is not one of the choices. */
+/** The learner's chosen step: within the choices, and the default if nothing usable is stored. */
 export function hardStepOf(prefs) {
   const n = Math.round(Number(prefs?.hardStep));
-  return HARD_STEPS.includes(n) ? n : DEFAULT_HARD_STEP;
+  if (!(n >= 1)) return DEFAULT_HARD_STEP;
+  return Math.min(n, HARD_STEPS.at(-1));
 }
 
 /** The learner flagged the word. Flagging an already-hard word makes it harder. */

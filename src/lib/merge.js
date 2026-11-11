@@ -4,7 +4,7 @@
 // changed. Merging keeps the newer copy of every entry, so two devices that
 // were both used offline lose nothing when they next sync.
 
-import { DEFAULT_HARD_STEP } from './scoring.js';
+import { DEFAULT_HARD_STEP, MAX_SCORE, MIN_SCORE } from './scoring.js';
 
 export const DEFAULT_PREFS = {
   level: 'A2',
@@ -31,7 +31,8 @@ export function sanitizeState(raw) {
     for (const [id, p] of Object.entries(raw.progress)) {
       if (!isObj(p)) continue;
       base.progress[id] = {
-        s: Number(p.s) || 0,
+        // A score saved under wider limits is brought back inside the current ones.
+        s: Math.min(MAX_SCORE, Math.max(MIN_SCORE, Number(p.s) || 0)),
         n: Number(p.n) || 0,
         l: Number(p.l) || 0,
         t: Number(p.t) || 0,
