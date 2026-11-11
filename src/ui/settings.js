@@ -407,17 +407,37 @@ function drawVoices() {
 
 function drawSources() {
   if (!sourcesEl) return;
-  const counts = new Map();
-  for (const e of store.index.list) counts.set(e.src, (counts.get(e.src) || 0) + 1);
   const added = store.customCount();
   fill(
     sourcesEl,
     h(
       'ul',
       { class: 'sources' },
-      [...counts.entries()].map(([src, n]) =>
-        h('li', null, h('span', null, src), h('span', { class: 'sources-n' }, plural(n, 'word'))),
+      store.lists().map((list) =>
+        h(
+          'li',
+          null,
+          h(
+            'label',
+            { class: 'source' },
+            h('span', { class: 'source-name' }, list.name),
+            h('span', { class: 'sources-n' }, list.on ? plural(list.count, 'word') : 'off'),
+            h('input', {
+              class: 'switch',
+              type: 'checkbox',
+              role: 'switch',
+              'aria-label': `Use the list “${list.name}”`,
+              checked: list.on,
+              onchange: (e) => store.setListOn(list.name, e.target.checked),
+            }),
+          ),
+        ),
       ),
+    ),
+    h(
+      'p',
+      { class: 'help' },
+      'Turn a list off to leave its words out of your word list and your texts. Nothing is deleted: the words and their progress come back when you turn it on again.',
     ),
     added > 0 &&
       h(

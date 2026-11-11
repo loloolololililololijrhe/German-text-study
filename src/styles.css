@@ -1033,11 +1033,30 @@ input[type='range'] {
 }
 
 .sources li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
   border-bottom: 1px solid var(--line);
+}
+
+.source {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.source-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source .switch {
+  margin: 0;
+}
+
+.sources + .help {
+  margin-top: 10px;
 }
 
 .sources-n {

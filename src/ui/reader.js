@@ -119,6 +119,7 @@ function renderGenerator() {
   const prefs = store.state.prefs;
   const custom = TOPICS.some((t) => t.id === prefs.topic) ? '' : prefs.topic;
   const hasKey = !!store.local.apiKey;
+  const hasWords = store.index.list.length > 0;
 
   const chips = h(
     'div',
@@ -195,9 +196,16 @@ function renderGenerator() {
         h('p', null, 'Texts are written by Claude. Add your Claude API key once to get started.'),
         h('button', { class: 'btn', type: 'button', onclick: openSettings }, 'Open settings'),
       ),
+    !hasWords &&
+      h(
+        'div',
+        { class: 'notice has-action' },
+        h('p', null, 'Every word list is turned off. Turn one on to have something to read about.'),
+        h('button', { class: 'btn', type: 'button', onclick: openSettings }, 'Open settings'),
+      ),
     h(
       'button',
-      { class: 'btn btn-primary btn-big', type: 'button', disabled: !hasKey, onclick: generate },
+      { class: 'btn btn-primary btn-big', type: 'button', disabled: !hasKey || !hasWords, onclick: generate },
       'Generate text',
     ),
   );
@@ -494,6 +502,8 @@ function openWord(el) {
 function flag(word) {
   let entry = store.index.find(word.l);
   if (!entry) {
+    // With the "Added while reading" list turned off, words outside the lists are left alone.
+    if (store.isListOff(FROM_TEXT)) return;
     store.addCustom([{ de: word.l || word.w, en: word.g || '?', src: FROM_TEXT }]);
     entry = store.index.find(word.l);
     if (!entry) return;
@@ -538,7 +548,7 @@ function wordSheet(word, si) {
     const p = store.progressOf(id);
     const marked = id in text.hard;
     const hard = (p?.s ?? 0) < 0;
-    const scored = !isUnscored(word);
+    const scored = !isUnscored(word) && (!!entry || !store.isListOff(FROM_TEXT));
     const base = entry?.de || word.l;
     const showBase = base && (base.toLowerCase() !== word.w.toLowerCase() || (entry && entry.en !== word.g));
 

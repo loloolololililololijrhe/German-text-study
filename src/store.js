@@ -1,7 +1,7 @@
 // App state: what is synced (progress, custom words, preferences), what stays
 // on this device (keys, tokens), and the sync loop that reconciles the two.
 
-import { buildWordIndex, normKey, parseWordList } from './lib/words.js';
+import { buildWordIndex, listNames, normKey, parseWordList, withoutLists } from './lib/words.js';
 import { emptyState, mergeStates, sanitizeState, stableStringify } from './lib/merge.js';
 import { capHardness, maxHardOf } from './lib/scoring.js';
 import { dayKey, newPerDayOf } from './lib/srs.js';
@@ -77,9 +77,35 @@ export const store = {
     // A lower limit on hardness also eases the words that were already beyond it.
     if ('maxHard' in patch)
       Object.assign(this.state.progress, capHardness(this.state.progress, maxHardOf(this.state.prefs), Date.now()));
+    if ('listsOff' in patch) rebuildIndex();
     persist();
     this.emit('prefs');
+    if ('listsOff' in patch) this.emit('words');
     this.syncSoon();
+  },
+
+  /** Every word list with whether it is on and how many words it adds to the list. */
+  lists() {
+    const off = new Set(this.state.prefs.listsOff);
+    const counts = new Map();
+    for (const e of this.index.list) counts.set(e.src, (counts.get(e.src) || 0) + 1);
+    return listNames({ builtin, deck, custom: this.state.custom }).map((name) => ({
+      name,
+      on: !off.has(name),
+      count: counts.get(name) || 0,
+    }));
+  },
+
+  isListOff(name) {
+    return this.state.prefs.listsOff.includes(name);
+  },
+
+  /** Turn a word list on or off. Its words and their progress are kept either way. */
+  setListOn(name, on) {
+    const off = new Set(this.state.prefs.listsOff);
+    if (on) off.delete(name);
+    else off.add(name);
+    this.updatePrefs({ listsOff: [...off].sort() });
   },
 
   setLocal(patch) {
@@ -245,7 +271,8 @@ function persist() {
 }
 
 function rebuildIndex() {
-  store.index = buildWordIndex({ builtin, deck, custom: store.state.custom });
+  const sources = { builtin, deck, custom: store.state.custom };
+  store.index = buildWordIndex(withoutLists(sources, store.state.prefs.listsOff));
 }
 
 rebuildIndex();

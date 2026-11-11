@@ -38,6 +38,11 @@ Words Anki is still teaching you come in as hard words. Importing again later
 takes over the words Anki has reviewed since; words you reviewed more recently
 in the app are left alone. (The app cannot write back to Anki.)
 
+Every list under **Settings → Word lists** has a switch. Turning a list off
+leaves its words out of your word list and your texts, for example the common
+words if you only want your deck. Nothing is deleted: the words and their
+progress come back when you turn the list on again.
+
 The built-in deck is `src/data/deck.json`:
 `{ "name": "...", "words": [{ "de": "der Hund", "en": "dog" }, ...] }`.
 Only put a list there that you are free to publish: the repository and the

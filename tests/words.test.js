@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWordIndex, normKey, parseWordList } from '../src/lib/words.js';
+import { buildWordIndex, listNames, normKey, parseWordList, withoutLists } from '../src/lib/words.js';
 
 test('normKey reduces dictionary entries to the bare word', () => {
   const cases = {
@@ -121,4 +121,49 @@ test("deck words are marked as the learner's own; built-in words are not, even w
   });
   const priority = Object.fromEntries(index.list.map((e) => [e.id, e.priority]));
   assert.deepEqual(priority, { gehen: true, Haus: false, Zug: true, Jahr: true, und: false });
+});
+
+// ---- turning word lists off ------------------------------------------------------
+
+const SOURCES = {
+  builtin: parseWordList('der Hund = dog\ngehen = to go\ndas Haus = house\nund = and', 'Common words'),
+  deck: [
+    { de: 'gehen', en: 'Verb: to go', src: 'My deck' },
+    { de: 'das Jahr', en: 'Noun: year', src: 'My deck' },
+  ],
+  custom: {
+    Zug: { de: 'der Zug', en: 'train', src: 'Added while reading', r: 2000 },
+    Haus: { de: 'das Haus', en: 'house, home', src: 'Common words', r: 2 }, // an edited built-in word
+    Katze: { de: 'die Katze', en: 'cat', src: 'Second deck', r: 0 },
+  },
+};
+const idsOf = (off) =>
+  buildWordIndex(withoutLists(SOURCES, off))
+    .list.map((e) => e.id)
+    .sort();
+
+test('every list is named once, the deck first and the built-in words last', () => {
+  assert.deepEqual(listNames(SOURCES), ['My deck', 'Added while reading', 'Second deck', 'Common words']);
+  assert.deepEqual(listNames({ builtin: SOURCES.builtin }), ['Common words']);
+});
+
+test('a list that is turned off drops out of the word list, and comes back unchanged', () => {
+  assert.deepEqual(idsOf([]), ['Haus', 'Hund', 'Jahr', 'Katze', 'Zug', 'gehen', 'und']);
+  assert.deepEqual(
+    idsOf(['Common words']),
+    ['Jahr', 'Katze', 'Zug', 'gehen'],
+    'edited built-in words go with their list',
+  );
+  assert.deepEqual(idsOf(['Second deck', 'Added while reading']), ['Haus', 'Hund', 'Jahr', 'gehen', 'und']);
+  assert.deepEqual(idsOf(['My deck', 'Second deck', 'Added while reading', 'Common words']), []);
+  assert.equal(withoutLists(SOURCES, []).custom, SOURCES.custom, 'nothing is copied or removed when all lists are on');
+});
+
+test('with the deck off, a built-in word the deck was covering shows again', () => {
+  const on = buildWordIndex(withoutLists(SOURCES, []));
+  assert.equal(on.byId.get('gehen').src, 'My deck');
+  const off = buildWordIndex(withoutLists(SOURCES, ['My deck']));
+  assert.equal(off.byId.get('gehen').src, 'Common words');
+  assert.equal(off.byId.get('gehen').en, 'to go');
+  assert.ok(!off.byId.has('Jahr'));
 });

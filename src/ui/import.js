@@ -223,6 +223,8 @@ function openMapping(parsed, fileName) {
             disabled: !words.length,
             onclick: () => {
               const src = nameInput.value.trim() || 'Imported deck';
+              // Importing into a list that was turned off turns it back on.
+              if (fresh.length && store.isListOff(src)) store.setListOn(src, true);
               const added = fresh.length
                 ? store.addCustom(fresh.map((w) => ({ de: w.de, en: w.en, src, rank: w.rank })))
                 : 0;

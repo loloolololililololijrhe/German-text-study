@@ -116,3 +116,31 @@ export function buildWordIndex({ builtin = [], deck = [], custom = {} }) {
     },
   };
 }
+
+/**
+ * Leave out the word lists the learner has turned off. A list is known by its
+ * source name ("Common words", a deck's name, ...). Nothing is deleted: the
+ * same sources with an empty `off` give the full list again.
+ */
+export function withoutLists({ builtin = [], deck = [], custom = {} }, off = []) {
+  const hidden = new Set(off);
+  if (!hidden.size) return { builtin, deck, custom };
+  return {
+    builtin: builtin.filter((e) => !hidden.has(e.src)),
+    deck: deck.filter((e) => !hidden.has(e.src || 'deck')),
+    custom: Object.fromEntries(Object.entries(custom).filter(([, c]) => !hidden.has(c.src || 'custom'))),
+  };
+}
+
+/** The names of all word lists, on or off: the default deck, then the learner's own, then the built-in words. */
+export function listNames({ builtin = [], deck = [], custom = {} }) {
+  const names = new Set();
+  for (const d of deck) names.add(d.src || 'deck');
+  const builtinNames = new Set(builtin.map((b) => b.src));
+  for (const c of Object.values(custom)) {
+    const name = c.src || 'custom';
+    if (!builtinNames.has(name)) names.add(name);
+  }
+  for (const name of builtinNames) names.add(name);
+  return [...names];
+}

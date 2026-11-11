@@ -18,6 +18,8 @@ export const DEFAULT_PREFS = {
   underlineHard: true,
   retention: DEFAULT_RETENTION,
   newPerDay: DEFAULT_NEW_PER_DAY,
+  // Names of the word lists the learner has turned off.
+  listsOff: [],
   rate: 0.85,
   u: 0,
 };
@@ -76,7 +78,11 @@ export function sanitizeState(raw) {
   if (isObj(raw.intro) && typeof raw.intro.day === 'string') {
     base.intro = { day: raw.intro.day, n: Math.max(0, Number(raw.intro.n) || 0) };
   }
-  if (isObj(raw.prefs)) base.prefs = { ...DEFAULT_PREFS, ...raw.prefs, u: Number(raw.prefs.u) || 0 };
+  if (isObj(raw.prefs)) {
+    base.prefs = { ...DEFAULT_PREFS, ...raw.prefs, u: Number(raw.prefs.u) || 0 };
+    const off = raw.prefs.listsOff;
+    base.prefs.listsOff = Array.isArray(off) ? off.filter((x) => typeof x === 'string') : [];
+  }
   return base;
 }
 

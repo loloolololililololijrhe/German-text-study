@@ -116,3 +116,10 @@ test('the count of new words started today follows the later day, or the larger 
   assert.deepEqual(sanitizeState({ intro: { day: '2026-11-11', n: '5' } }).intro, { day: '2026-11-11', n: 5 });
   assert.deepEqual(sanitizeState({ intro: 'x' }).intro, { day: '', n: 0 });
 });
+
+test('the lists that are turned off are kept as a list of names', () => {
+  assert.deepEqual(emptyState().prefs.listsOff, []);
+  assert.deepEqual(sanitizeState({ prefs: { listsOff: ['Common words', 7, null] } }).prefs.listsOff, ['Common words']);
+  assert.deepEqual(sanitizeState({ prefs: { listsOff: 'Common words' } }).prefs.listsOff, []);
+  assert.deepEqual(sanitizeState({ prefs: { level: 'B1' } }).prefs.listsOff, []);
+});
