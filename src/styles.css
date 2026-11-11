@@ -909,20 +909,22 @@ a {
   color: var(--accent);
 }
 
-.score {
+.when {
   flex: none;
-  width: 2.2em;
+  min-width: 3.6em;
   color: var(--muted);
-  font-weight: 650;
+  font-size: 0.875rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
 }
 
-.score.is-hard {
+.when.is-hard {
   color: var(--hard);
 }
 
-.score.is-known {
+.when.is-due {
   color: var(--accent);
 }
 

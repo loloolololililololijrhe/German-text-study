@@ -5,6 +5,7 @@ import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
 import { MODELS } from '../lib/models.js';
 import { LEVELS } from '../lib/prompt.js';
 import { HARD_SHARE, MAX_HARD_CHOICES, hardStepChoices, hardStepOf, maxHardOf } from '../lib/scoring.js';
+import { NEW_PER_DAY_CHOICES, RETENTION_CHOICES, newPerDayOf, retentionOf } from '../lib/srs.js';
 import { tts } from '../tts.js';
 import { pickDeckFile } from './import.js';
 
@@ -243,12 +244,61 @@ function drawHardness() {
       { class: 'input', 'aria-label': label, onchange: (e) => onPick(Number(e.target.value)) },
       choices.map((n) => h('option', { value: String(n), selected: n === current }, reads(n))),
     );
+  const choice = (choices, current, write, onPick, ariaLabel) =>
+    h(
+      'select',
+      { class: 'input', 'aria-label': ariaLabel, onchange: (e) => onPick(Number(e.target.value)) },
+      // A value set elsewhere that is not one of the choices is still shown.
+      [...new Set([...choices, current])]
+        .sort((a, b) => a - b)
+        .map((n) => h('option', { value: String(n), selected: n === current }, write(n))),
+    );
   fill(
     hardEl,
     h(
       'label',
       { class: 'field' },
-      h('span', { class: 'label' }, 'A hard word is normal again after'),
+      h('span', { class: 'label' }, 'New words a day'),
+      choice(
+        NEW_PER_DAY_CHOICES,
+        newPerDayOf(prefs),
+        (n) => (n ? `${n} new words` : 'No new words'),
+        (n) => {
+          store.updatePrefs({ newPerDay: n });
+          drawRules();
+        },
+        'New words a day',
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        'How many words from your deck may be started each day. Every new word comes back for review over the following days, so a higher number means more to read later.',
+      ),
+    ),
+    h(
+      'label',
+      { class: 'field' },
+      h('span', { class: 'label' }, 'Bring a word back when the chance of knowing it is'),
+      choice(
+        RETENTION_CHOICES,
+        retentionOf(prefs),
+        (r) => `${Math.round(r * 100)}%`,
+        (r) => {
+          store.updatePrefs({ retention: r });
+          drawRules();
+        },
+        'Chance of recall at which a word is due',
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        'Anki calls this desired retention. Higher brings words back sooner and more often; lower spaces them further apart. Applies from each word’s next review.',
+      ),
+    ),
+    h(
+      'label',
+      { class: 'field' },
+      h('span', { class: 'label' }, 'A hard word is back on the schedule after'),
       select(
         hardStepChoices(prefs),
         step,
@@ -261,7 +311,7 @@ function drawHardness() {
       h(
         'span',
         { class: 'help' },
-        'Marking a word hard lowers its score by this much, and every text you read it in without tapping raises it by 1. A higher number repeats each hard word more, but fewer new words fit in. Applies to words you mark from now on.',
+        'A word you mark hard has to be read this many times without tapping, in the texts that follow, before it returns to the schedule. A higher number repeats each hard word more, but fewer other words fit in. Applies to words you mark from now on.',
       ),
     ),
     h(
@@ -289,30 +339,36 @@ function drawHardness() {
 
 function drawRules() {
   if (!rulesEl) return;
-  const step = hardStepOf(store.state.prefs);
-  const max = maxHardOf(store.state.prefs);
+  const prefs = store.state.prefs;
+  const step = hardStepOf(prefs);
+  const max = maxHardOf(prefs);
+  const percent = Math.round(retentionOf(prefs) * 100);
   fill(
     rulesEl,
-    h('li', null, 'Every word has a score. New words start at 0.'),
     h(
       'li',
       null,
-      `Marking a word hard drops its score by ${step}, and marking it again drops it further, but never below −${max}. Hard words get up to ${Math.round(HARD_SHARE * 100)}% of the places in each new text.`,
+      `Words are scheduled the way Anki does it. Every word has a memory strength; each time you read it without tapping, the strength grows and the word is put further into the future. It becomes due when your chance of still knowing it has fallen to ${percent}%.`,
     ),
     h(
       'li',
       null,
-      `Each time you finish a text, every word in it that you did not tap goes up by 1. So a hard word needs ${reads(step)} to become normal again, and never more than ${max}.`,
+      'Finishing a text reviews every word in it at once: untapped words count as remembered, looked-up words as hesitant, so they come back sooner.',
     ),
     h(
       'li',
       null,
-      'The other places go to words from your Anki deck that you do not know yet. Each point of score halves a word’s chance of being picked.',
+      `Marking a word hard is Anki’s “Again”: its memory strength drops and it needs ${reads(step)} in the coming texts before it goes back on the schedule (marking it again adds more, up to ${max}).`,
     ),
     h(
       'li',
       null,
-      'The built-in common words are not chosen while deck words are left to learn. They still appear whenever a text needs them, and you can tap and mark them like any other word.',
+      `Each text is built from: new words from your deck, in deck order (about a quarter of the places, up to ${newPerDayOf(prefs)} a day); hard words (up to ${Math.round(HARD_SHARE * 100)}% of the places); then the due words you are most likely to have forgotten.`,
+    ),
+    h(
+      'li',
+      null,
+      'When nothing is due, the text practises the words that are due soonest. The built-in common words are only chosen when your deck has nothing left to offer; they are still rescheduled whenever they appear.',
     ),
   );
 }

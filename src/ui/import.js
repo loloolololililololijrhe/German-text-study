@@ -2,7 +2,7 @@
 
 import { store } from '../store.js';
 import { normKey } from '../lib/words.js';
-import { fromAnki } from '../lib/scoring.js';
+import { ankiIsNewer, fromAnki, rulesOf } from '../lib/scoring.js';
 import { fill, h, plural, toast } from './dom.js';
 import { bestNoteType, extractWords, fieldChoices, guessMapping, parseAnkiText, parseApkg } from '../lib/anki.js';
 
@@ -92,8 +92,12 @@ function openMapping(parsed, fileName) {
       return !(e && e.priority && e.de === w.de && e.en === w.en);
     });
     const already = listed.length - fresh.length;
-    const known = listed.filter((w) => w.level === 2).length;
-    const learning = listed.filter((w) => w.level === 1).length;
+    // What Anki knows about these words, for the ones where it is ahead of this app.
+    const now = Date.now();
+    const fromDeck = listed.filter((w) => w.study && ankiIsNewer(store.progressOf(w.id), w.study));
+    const relearning = fromDeck.filter((w) => w.study.hard).length;
+    const scheduled = fromDeck.length - relearning;
+    const dueNow = fromDeck.filter((w) => !w.study.hard && w.study.due <= now).length;
     const dropped = skipped.empty + skipped.long + skipped.duplicate;
     const reasons = [
       skipped.empty && `${skipped.empty} with an empty field`,
@@ -142,7 +146,7 @@ function openMapping(parsed, fileName) {
           ),
         ),
       ),
-      known + learning > 0 &&
+      fromDeck.length > 0 &&
         h(
           'label',
           { class: 'switch-row' },
@@ -153,7 +157,14 @@ function openMapping(parsed, fileName) {
             h(
               'span',
               { class: 'help' },
-              `${plural(known, 'word')} you know well in Anki will start as known and ${learning.toLocaleString('en')} you are still learning as learning, so texts concentrate on the rest. Words you have already practised here keep their scores.`,
+              [
+                `${plural(scheduled, 'word')} carry on from Anki's schedule, with the same memory strength and due date`,
+                dueNow ? ` (${dueNow.toLocaleString('en')} are due now)` : '',
+                relearning
+                  ? `, and ${relearning.toLocaleString('en')} that Anki is still teaching you come in as hard words`
+                  : '',
+                '. Words you have reviewed here more recently than in Anki are left alone.',
+              ].join(''),
             ),
           ),
           h('input', {
@@ -215,19 +226,17 @@ function openMapping(parsed, fileName) {
               const added = fresh.length
                 ? store.addCustom(fresh.map((w) => ({ de: w.de, en: w.en, src, rank: w.rank })))
                 : 0;
-              // Anki progress only fills in words this app knows nothing about yet.
+              // Anki's record replaces the app's only where Anki is ahead.
               const updates = {};
               if (useProgress) {
-                const now = Date.now();
-                for (const w of listed) {
-                  if (w.level && !store.progressOf(w.id)) updates[w.id] = fromAnki(w.level, now);
-                }
+                const rules = rulesOf(store.state.prefs);
+                for (const w of fromDeck) updates[w.id] = fromAnki(w.study, now, rules);
               }
               const marked = Object.keys(updates).length;
               if (marked) store.setProgressMany(updates);
               dialog.close();
               toast(
-                [added && `Imported ${plural(added, 'word')}`, marked && `${plural(marked, 'word')} marked from Anki`]
+                [added && `Imported ${plural(added, 'word')}`, marked && `${plural(marked, 'word')} updated from Anki`]
                   .filter(Boolean)
                   .join(' · ') || 'Nothing new to import',
               );

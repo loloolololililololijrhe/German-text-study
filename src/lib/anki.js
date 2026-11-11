@@ -4,6 +4,7 @@
 import { unzipSync } from 'fflate';
 import { decompress as zstdDecompress } from 'fzstd';
 import { normKey } from './words.js';
+import { memoryFromSm2 } from './srs.js';
 
 // Named entities are case-sensitive (&Auml; is not &auml;).
 const ENTITIES = {
@@ -58,9 +59,6 @@ export function cleanField(value) {
   return s.replace(/^[;\s]+|[;\s]+$/g, '');
 }
 
-/** Anki calls a card mature once its review interval reaches three weeks. */
-const MATURE_DAYS = 21;
-
 function rows(db, sql) {
   const res = db.exec(sql);
   return res.length ? res[0].values : [];
@@ -69,8 +67,8 @@ function rows(db, sql) {
 /**
  * @param {Uint8Array} bytes  the .apkg file
  * @param {object} SQL        an initialised sql.js module
- * @returns {{noteTypes: {name:string, deck:string, fields:string[], notes:string[][], levels:number[]}[]}}
- *   `levels[i]` says how well note i is known in Anki: 0 not yet, 1 learning, 2 well learned.
+ * @returns {{noteTypes: {name:string, deck:string, fields:string[], notes:string[][], study:(object|null)[]}[]}}
+ *   `study[i]` is what Anki knows about note i (see cardStudy), or null if it was never studied.
  */
 export function parseApkg(bytes, SQL) {
   let files;
@@ -112,6 +110,47 @@ function withoutAnkiCollation(db, SQL) {
   }
   db.close();
   return new SQL.Database(bytes);
+}
+
+/**
+ * What Anki knows about one card, or null for a card never studied.
+ *
+ * With FSRS (Anki's current scheduler) the card stores its memory state and
+ * last review time. Cards scheduled the older way only have an interval and an
+ * ease factor, which are converted. `hard` marks a card Anki is still teaching
+ * or re-teaching; such a word comes into the app as a hard word.
+ */
+function cardStudy({ type, due, ivl, factor, data }, firstDay) {
+  if (type === 0) return null;
+  let info = {};
+  try {
+    info = JSON.parse(data || '{}') || {};
+  } catch {
+    /* no extra data */
+  }
+  const hard = type === 1 || type === 3;
+  let memory;
+  if (Number(info.s) > 0) memory = { S: Number(info.s), D: Number(info.d) || 5 };
+  else if (ivl > 0) memory = memoryFromSm2(ivl, factor / 1000);
+  else if (hard) memory = { S: 0.5, D: 6.4 };
+  else return null;
+
+  const onSchedule = type === 2 && firstDay > 0;
+  const last = Number(info.lrt) > 0 ? info.lrt * 1000 : onSchedule ? (firstDay + (due - ivl) * 86400) * 1000 : 0;
+  return {
+    S: Math.round(memory.S * 10000) / 10000,
+    D: Math.min(10, Math.max(1, Math.round(memory.D * 10000) / 10000)),
+    last,
+    due: onSchedule ? (firstDay + due * 86400) * 1000 : 0,
+    hard,
+  };
+}
+
+/** A note can have several cards. The best-known one speaks for the word. */
+function betterStudy(a, b) {
+  if (!b) return true;
+  if (a.hard !== b.hard) return !a.hard;
+  return a.S > b.S;
 }
 
 function readCollection(db) {
@@ -160,24 +199,30 @@ function readCollection(db) {
     }
   }
 
+  // The collection's first day, in seconds. A review card's `due` counts days from it.
+  let firstDay = 0;
+  try {
+    firstDay = Number(rows(db, 'SELECT crt FROM col')[0]?.[0]) || 0;
+  } catch {
+    /* due dates stay unknown */
+  }
+
   // In an unstudied deck, a card's `due` is its position in the intended order.
   const order = new Map();
   const deckOf = new Map();
-  const levelOf = new Map();
+  const studyOf = new Map();
   let untouched = true;
   try {
-    // A review card's `ivl` is the days until Anki shows it again: the longer,
-    // the better the word is known. Cards being (re)learned do not count yet.
-    const cards = rows(
+    for (const [nid, due, type, did, ivl, factor, data] of rows(
       db,
-      'SELECT nid, MIN(due), MAX(type), MIN(did), MAX(CASE WHEN type = 2 THEN ivl ELSE 0 END) FROM cards GROUP BY nid',
-    );
-    for (const [nid, due, maxType, did, interval] of cards) {
-      order.set(String(nid), due);
-      deckOf.set(String(nid), String(did));
-      if (interval >= MATURE_DAYS) levelOf.set(String(nid), 2);
-      else if (interval > 0) levelOf.set(String(nid), 1);
-      if (maxType !== 0) untouched = false;
+      'SELECT nid, due, type, did, ivl, factor, data FROM cards',
+    )) {
+      const id = String(nid);
+      if (!order.has(id) || due < order.get(id)) order.set(id, due);
+      if (!deckOf.has(id)) deckOf.set(id, String(did));
+      if (type !== 0) untouched = false;
+      const study = cardStudy({ type, due, ivl, factor, data }, firstDay);
+      if (study && betterStudy(study, studyOf.get(id))) studyOf.set(id, study);
     }
   } catch {
     untouched = false;
@@ -194,14 +239,14 @@ function readCollection(db) {
 
   const grouped = new Map();
   for (const n of notes) {
-    if (!grouped.has(n.mid)) grouped.set(n.mid, { list: [], levels: [], decks: new Map() });
+    if (!grouped.has(n.mid)) grouped.set(n.mid, { list: [], study: [], decks: new Map() });
     const g = grouped.get(n.mid);
     g.list.push(n.fields);
-    g.levels.push(levelOf.get(n.id) || 0);
+    g.study.push(studyOf.get(n.id) || null);
     const did = deckOf.get(n.id);
     if (did) g.decks.set(did, (g.decks.get(did) || 0) + 1);
   }
-  const noteTypes = [...grouped.entries()].map(([mid, { list, levels, decks }]) => {
+  const noteTypes = [...grouped.entries()].map(([mid, { list, study, decks }]) => {
     const t = types.get(mid);
     const width = Math.max(...list.map((f) => f.length));
     const fields = Array.from({ length: width }, (_, i) => t?.fields[i] || `Field ${i + 1}`);
@@ -210,7 +255,7 @@ function readCollection(db) {
       .split(/\x1f|::/)
       .pop()
       .trim();
-    return { name: t?.name || 'Notes', deck, fields, notes: list, levels };
+    return { name: t?.name || 'Notes', deck, fields, notes: list, study };
   });
   noteTypes.sort((a, b) => b.notes.length - a.notes.length);
   if (!noteTypes.length) throw new Error('This deck has no notes in it.');
@@ -418,7 +463,7 @@ export function joinMeanings(values) {
  * Turn mapped notes into word pairs, in deck order, dropping what cannot be
  * used. `enIndexes` is one field index or several, whose values are joined.
  * A word that appears twice is kept once, with the fuller of its meanings.
- * Each word carries `level`, how well it is known in Anki (0, 1 or 2).
+ * Each word carries `study`, what Anki knows about it, or null.
  */
 export function extractWords(noteType, deIndex, enIndexes) {
   const enList = [enIndexes].flat();
@@ -429,7 +474,7 @@ export function extractWords(noteType, deIndex, enIndexes) {
   noteType.notes.forEach((n, row) => {
     const de = n[deIndex] || '';
     const en = joinMeanings(enList.map((i) => n[i]));
-    const level = noteType.levels?.[row] || 0;
+    const study = noteType.study?.[row] || null;
     const id = normKey(de);
     if (!id || !en) skipped.empty++;
     else if (id.split(' ').length > 5) skipped.long++;
@@ -437,10 +482,10 @@ export function extractWords(noteType, deIndex, enIndexes) {
       skipped.duplicate++;
       const first = words[at.get(id)];
       if (senses(en) > senses(first.en)) first.en = en;
-      first.level = Math.max(first.level, level);
+      if (study && betterStudy(study, first.study)) first.study = study;
     } else {
       at.set(id, words.length);
-      words.push({ de, en, level });
+      words.push({ de, en, study });
     }
   });
   return { words, skipped };

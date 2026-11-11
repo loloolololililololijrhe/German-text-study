@@ -4,7 +4,8 @@
 // changed. Merging keeps the newer copy of every entry, so two devices that
 // were both used offline lose nothing when they next sync.
 
-import { DEFAULT_HARD_STEP, DEFAULT_MAX_HARD, MAX_SCORE, MIN_SCORE } from './scoring.js';
+import { DEFAULT_HARD_STEP, DEFAULT_MAX_HARD, upgradeProgress } from './scoring.js';
+import { DEFAULT_NEW_PER_DAY, DEFAULT_RETENTION } from './srs.js';
 
 export const DEFAULT_PREFS = {
   level: 'A2',
@@ -15,12 +16,23 @@ export const DEFAULT_PREFS = {
   hardStep: DEFAULT_HARD_STEP,
   maxHard: DEFAULT_MAX_HARD,
   underlineHard: true,
+  retention: DEFAULT_RETENTION,
+  newPerDay: DEFAULT_NEW_PER_DAY,
   rate: 0.85,
   u: 0,
 };
 
 export function emptyState() {
-  return { v: 1, progress: {}, custom: {}, resetAt: 0, clearedAt: 0, prefs: { ...DEFAULT_PREFS } };
+  return {
+    v: 1,
+    progress: {},
+    custom: {},
+    resetAt: 0,
+    clearedAt: 0,
+    // How many new words were started on the most recent day of reading.
+    intro: { day: '', n: 0 },
+    prefs: { ...DEFAULT_PREFS },
+  };
 }
 
 /** Accept anything parsed from storage or a gist and return a well-formed state. */
@@ -31,13 +43,19 @@ export function sanitizeState(raw) {
   if (isObj(raw.progress)) {
     for (const [id, p] of Object.entries(raw.progress)) {
       if (!isObj(p)) continue;
-      base.progress[id] = {
-        s: Math.min(MAX_SCORE, Math.max(MIN_SCORE, Number(p.s) || 0)),
+      const clean = {
+        s: Number(p.s) || 0,
         n: Number(p.n) || 0,
         l: Number(p.l) || 0,
         t: Number(p.t) || 0,
         u: Number(p.u) || 0,
       };
+      if (Number(p.S) > 0) {
+        clean.S = Number(p.S);
+        clean.D = Math.min(10, Math.max(1, Number(p.D) || 5));
+        clean.due = Number(p.due) || 0;
+      }
+      base.progress[id] = upgradeProgress(clean);
     }
   }
   if (isObj(raw.custom)) {
@@ -55,6 +73,9 @@ export function sanitizeState(raw) {
   }
   base.resetAt = Number(raw.resetAt) || 0;
   base.clearedAt = Number(raw.clearedAt) || 0;
+  if (isObj(raw.intro) && typeof raw.intro.day === 'string') {
+    base.intro = { day: raw.intro.day, n: Math.max(0, Number(raw.intro.n) || 0) };
+  }
   if (isObj(raw.prefs)) base.prefs = { ...DEFAULT_PREFS, ...raw.prefs, u: Number(raw.prefs.u) || 0 };
   return base;
 }
@@ -79,6 +100,10 @@ export function mergeStates(a, b) {
     if ((c.a || 0) > out.clearedAt) out.custom[id] = c;
   }
   out.prefs = { ...newer(a.prefs, b.prefs) };
+  // The later day counts; on the same day both devices started new words, so
+  // the larger count is the safer one (it can only hold new words back).
+  const [ia, ib] = [a.intro || out.intro, b.intro || out.intro];
+  out.intro = ia.day === ib.day ? { day: ia.day, n: Math.max(ia.n, ib.n) } : ia.day > ib.day ? { ...ia } : { ...ib };
   return out;
 }
 

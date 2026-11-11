@@ -1,0 +1,285 @@
+{
+ "anki": "26.09",
+ "retention": 0.88,
+ "cases": [
+  {
+   "stability": 2.3065,
+   "difficulty": 2.118,
+   "elapsed": 3,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 0.6369,
+     "difficulty": 7.3945,
+     "days": 1
+    },
+    "2": {
+     "kind": "review",
+     "stability": 9.235,
+     "difficulty": 4.7528,
+     "days": 11
+    },
+    "3": {
+     "kind": "review",
+     "stability": 13.827,
+     "difficulty": 2.1111,
+     "days": 16
+    },
+    "4": {
+     "kind": "review",
+     "stability": 23.8833,
+     "difficulty": 1.0,
+     "days": 29
+    }
+   }
+  },
+  {
+   "stability": 10.0,
+   "difficulty": 6.0,
+   "elapsed": 10,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 1.3765,
+     "difficulty": 8.6705,
+     "days": 2
+    },
+    "2": {
+     "kind": "review",
+     "stability": 21.0391,
+     "difficulty": 7.3298,
+     "days": 29
+    },
+    "3": {
+     "kind": "review",
+     "stability": 28.3556,
+     "difficulty": 5.9892,
+     "days": 39
+    },
+    "4": {
+     "kind": "review",
+     "stability": 44.3783,
+     "difficulty": 4.6486,
+     "days": 60
+    }
+   }
+  },
+  {
+   "stability": 10.0,
+   "difficulty": 6.0,
+   "elapsed": 2,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 1.2209,
+     "difficulty": 8.6705,
+     "days": 2
+    },
+    "2": {
+     "kind": "review",
+     "stability": 12.9195,
+     "difficulty": 7.3298,
+     "days": 18
+    },
+    "3": {
+     "kind": "review",
+     "stability": 14.8545,
+     "difficulty": 5.9892,
+     "days": 21
+    },
+    "4": {
+     "kind": "review",
+     "stability": 19.0919,
+     "difficulty": 4.6486,
+     "days": 26
+    }
+   }
+  },
+  {
+   "stability": 10.0,
+   "difficulty": 6.0,
+   "elapsed": 25,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 1.5547,
+     "difficulty": 8.6705,
+     "days": 2
+    },
+    "2": {
+     "kind": "review",
+     "stability": 29.7761,
+     "difficulty": 7.3298,
+     "days": 36
+    },
+    "3": {
+     "kind": "review",
+     "stability": 42.8835,
+     "difficulty": 5.9892,
+     "days": 53
+    },
+    "4": {
+     "kind": "review",
+     "stability": 71.5875,
+     "difficulty": 4.6486,
+     "days": 89
+    }
+   }
+  },
+  {
+   "stability": 40.0,
+   "difficulty": 9.9,
+   "elapsed": 30,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 2.4388,
+     "difficulty": 9.9524,
+     "days": 3
+    },
+    "2": {
+     "kind": "review",
+     "stability": 46.236,
+     "difficulty": 9.9188,
+     "days": 66
+    },
+    "3": {
+     "kind": "review",
+     "stability": 50.3692,
+     "difficulty": 9.8853,
+     "days": 72
+    },
+    "4": {
+     "kind": "review",
+     "stability": 59.4204,
+     "difficulty": 9.8518,
+     "days": 84
+    }
+   }
+  },
+  {
+   "stability": 2.0,
+   "difficulty": 9.9,
+   "elapsed": 1,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 0.4761,
+     "difficulty": 9.9524,
+     "days": 1
+    },
+    "2": {
+     "kind": "review",
+     "stability": 2.3728,
+     "difficulty": 9.9188,
+     "days": 4
+    },
+    "3": {
+     "kind": "review",
+     "stability": 2.6198,
+     "difficulty": 9.8853,
+     "days": 6
+    },
+    "4": {
+     "kind": "review",
+     "stability": 3.1609,
+     "difficulty": 9.8518,
+     "days": 9
+    }
+   }
+  },
+  {
+   "stability": 120.0,
+   "difficulty": 4.0,
+   "elapsed": 150,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 4.1708,
+     "difficulty": 8.0131,
+     "days": 5
+    },
+    "2": {
+     "kind": "review",
+     "stability": 263.1862,
+     "difficulty": 6.0021,
+     "days": 340
+    },
+    "3": {
+     "kind": "review",
+     "stability": 358.0881,
+     "difficulty": 3.9912,
+     "days": 463
+    },
+    "4": {
+     "kind": "review",
+     "stability": 565.9153,
+     "difficulty": 1.9803,
+     "days": 732
+    }
+   }
+  },
+  {
+   "stability": 0.5,
+   "difficulty": 7.0,
+   "elapsed": 1,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 0.1909,
+     "difficulty": 8.9991,
+     "days": 1
+    },
+    "2": {
+     "kind": "review",
+     "stability": 1.6458,
+     "difficulty": 7.9937,
+     "days": 2
+    },
+    "3": {
+     "kind": "review",
+     "stability": 2.4052,
+     "difficulty": 6.9882,
+     "days": 3
+    },
+    "4": {
+     "kind": "review",
+     "stability": 4.0682,
+     "difficulty": 5.9828,
+     "days": 5
+    }
+   }
+  },
+  {
+   "stability": 15.0,
+   "difficulty": 5.0,
+   "elapsed": 0,
+   "next": {
+    "1": {
+     "kind": "relearning",
+     "stability": 4.4564,
+     "difficulty": 8.3418,
+     "days": 6
+    },
+    "2": {
+     "kind": "review",
+     "stability": 15.0,
+     "difficulty": 6.666,
+     "days": 20
+    },
+    "3": {
+     "kind": "review",
+     "stability": 15.0,
+     "difficulty": 4.9902,
+     "days": 22
+    },
+    "4": {
+     "kind": "review",
+     "stability": 22.688,
+     "difficulty": 3.3145,
+     "days": 29
+    }
+   }
+  }
+ ]
+}

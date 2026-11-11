@@ -286,35 +286,74 @@ test('joinMeanings writes a shared label once and keeps different ones', () => {
   assert.equal(joinMeanings([]), '');
 });
 
-test('a collection package carries how well each word is known in Anki', () => {
-  const parsed = parseApkg(new Uint8Array(fixture('studied.colpkg')), SQL);
+const DAY_MS = 86_400_000;
+
+test("an FSRS collection carries each word's memory state, last review and due date", () => {
+  // Built with Anki itself: two cards answered Easy, one Good and one Again
+  // (both still in Anki's learning steps), one never studied.
+  const parsed = parseApkg(new Uint8Array(fixture('fsrs.colpkg')), SQL);
   const [vocab] = parsed.noteTypes;
   assert.equal(vocab.deck, 'Wortschatz', 'the innermost deck name is suggested');
-  // Review intervals of 60, 21, 20 and 3 days, then three unstudied notes.
-  assert.deepEqual(vocab.levels, [2, 2, 1, 1, 0, 0, 0]);
+  const firstDay = 1794369600; // the collection's first day, in seconds
+  const reviewed = 1794403479000;
+  assert.deepEqual(vocab.study, [
+    { S: 8.2956, D: 1, last: reviewed, due: (firstDay + 8 * 86400) * 1000, hard: false },
+    { S: 2.3065, D: 2.118, last: reviewed, due: 0, hard: true },
+    { S: 0.212, D: 6.413, last: reviewed, due: 0, hard: true },
+    { S: 8.2956, D: 1, last: reviewed, due: (firstDay + 9 * 86400) * 1000, hard: false },
+    null,
+  ]);
 
   const mapping = guessMapping(vocab);
   const { words } = extractWords(vocab, mapping.de, mapping.en);
   assert.deepEqual(
-    words.map((w) => [w.de, w.level]),
+    words.map((w) => [w.de, w.study ? (w.study.hard ? 'hard' : 'scheduled') : 'new']),
     [
-      ['der Bahnhof', 2],
-      ['die Zeitung', 2],
-      ['aufstehen', 1],
-      ['müde', 1],
-      ['der Schlüssel', 0],
-      ['gehen', 0],
+      ['der Bahnhof', 'scheduled'],
+      ['die Zeitung', 'hard'],
+      ['aufstehen', 'hard'],
+      ['müde', 'scheduled'],
+      ['der Schlüssel', 'new'],
     ],
   );
 });
 
-test('decks exported without scheduling, and text files, have no Anki progress', () => {
+test("a collection on Anki's older scheduler is converted from intervals and ease", () => {
+  // Review intervals of 60, 21, 20 and 3 days, then three unstudied notes; the
+  // last one repeats "die Zeitung".
+  const parsed = parseApkg(new Uint8Array(fixture('studied.colpkg')), SQL);
+  const [vocab] = parsed.noteTypes;
+  assert.deepEqual(
+    vocab.study.map((x) => x && x.S),
+    [60, 21, 20, 3, null, null, null],
+  );
+  for (const x of vocab.study.filter(Boolean)) {
+    assert.equal(x.hard, false);
+    assert.ok(x.D >= 1 && x.D <= 10);
+    assert.equal(Math.round((x.due - x.last) / DAY_MS), x.S, 'due date and last review are an interval apart');
+  }
+  const mapping = guessMapping(vocab);
+  const { words } = extractWords(vocab, mapping.de, mapping.en);
+  assert.deepEqual(
+    words.map((w) => [w.de, w.study?.S ?? null]),
+    [
+      ['der Bahnhof', 60],
+      ['die Zeitung', 21],
+      ['aufstehen', 20],
+      ['müde', 3],
+      ['der Schlüssel', null],
+      ['gehen', null],
+    ],
+  );
+});
+
+test('decks exported without scheduling, and text files, carry no Anki progress', () => {
   const apkg = parseApkg(new Uint8Array(fixture('modern.apkg')), SQL).noteTypes[0];
-  assert.ok(apkg.levels.every((l) => l === 0));
+  assert.ok(apkg.study.every((x) => x === null));
   const text = parseAnkiText('Hund;dog\nKatze;cat\n').noteTypes[0];
   const { words } = extractWords(text, 0, 1);
   assert.deepEqual(
-    words.map((w) => w.level),
-    [0, 0],
+    words.map((w) => w.study),
+    [null, null],
   );
 });

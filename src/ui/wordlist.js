@@ -1,19 +1,38 @@
-// The Words tab: every word with its score, and the controls to correct it.
+// The Words tab: every word with where it stands on the schedule, and the
+// controls to correct it.
 
 import { store } from '../store.js';
 import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
-import { clearHard, hardStepOf, markHard, markKnown, maxHardOf, resetWord, statusOf } from '../lib/scoring.js';
+import { clearHard, intervalOf, isDue, markHard, markKnown, resetWord, rulesOf, statusOf } from '../lib/scoring.js';
+import { DAY, hasMemory, recallChance } from '../lib/srs.js';
 import { tts } from '../tts.js';
 
 const PAGE = 80;
 const FILTERS = [
   { id: 'all', label: 'All' },
+  { id: 'due', label: 'Due' },
   { id: 'hard', label: 'Hard' },
   { id: 'learning', label: 'Learning' },
   { id: 'known', label: 'Known' },
   { id: 'new', label: 'New' },
 ];
 const STATUS_LABEL = { hard: 'Hard', learning: 'Learning', known: 'Known', new: 'New' };
+
+/** A length of time in days, written short: "3 d", "5 wk", "4 mo", "1.5 y". */
+function span(days) {
+  if (days < 1) return 'today';
+  if (days < 14) return `${Math.round(days)} d`;
+  if (days < 56) return `${Math.round(days / 7)} wk`;
+  if (days < 700) return `${Math.round(days / 30.4)} mo`;
+  return `${(days / 365).toFixed(1)} y`;
+}
+
+/** When a word comes back, for the right-hand column of the list. */
+function whenLabel(r, now) {
+  if (r.st === 'new') return '\u2013';
+  if (r.st === 'hard') return `${-r.p.s} to go`;
+  return r.p.due <= now ? 'due' : span((r.p.due - now) / DAY);
+}
 
 let sheet;
 let filter = 'all';
@@ -65,17 +84,18 @@ export function leaveWords() {
   visible = false;
 }
 
-function scoreLabel(s) {
-  return s > 0 ? `+${s}` : s < 0 ? `−${-s}` : '0';
-}
-
 function update() {
+  const now = Date.now();
   const rows = store.index.list.map((e) => {
     const p = store.progressOf(e.id);
-    return { e, p, st: statusOf(p) };
+    // "Due" counts the words a text can be written around: your own deck.
+    return { e, p, st: statusOf(p), due: e.priority && isDue(p, now) };
   });
-  const counts = { all: rows.length, hard: 0, learning: 0, known: 0, new: 0 };
-  for (const r of rows) counts[r.st]++;
+  const counts = { all: rows.length, due: 0, hard: 0, learning: 0, known: 0, new: 0 };
+  for (const r of rows) {
+    counts[r.st]++;
+    if (r.due) counts.due++;
+  }
   const met = counts.all - counts.new;
 
   fill(
@@ -99,7 +119,11 @@ function update() {
       h('span', { class: 'meter-learning', style: `width:${pct(counts.learning, counts.all)}%` }),
       h('span', { class: 'meter-hard', style: `width:${pct(counts.hard, counts.all)}%` }),
     ),
-    h('p', { class: 'stat-note' }, `${met.toLocaleString('en')} of ${plural(counts.all, 'word')} met so far`),
+    h(
+      'p',
+      { class: 'stat-note' },
+      `${counts.due.toLocaleString('en')} due now · ${met.toLocaleString('en')} of ${plural(counts.all, 'word')} met so far`,
+    ),
   );
 
   fill(
@@ -123,10 +147,17 @@ function update() {
   );
 
   let shown = rows;
-  if (filter !== 'all') shown = shown.filter((r) => r.st === filter);
+  if (filter === 'due') shown = shown.filter((r) => r.due);
+  else if (filter !== 'all') shown = shown.filter((r) => r.st === filter);
   if (query) shown = shown.filter((r) => r.e.de.toLowerCase().includes(query) || r.e.en.toLowerCase().includes(query));
-  // Hardest first when looking at hard words; otherwise most common first.
-  shown.sort((a, b) => (filter === 'hard' ? (a.p?.s ?? 0) - (b.p?.s ?? 0) : 0) || a.e.rank - b.e.rank);
+  // Due words: the most forgotten first. Hard words: the hardest first. Otherwise deck order.
+  const order =
+    filter === 'due'
+      ? (a, b) => recallChance(a.p, now) - recallChance(b.p, now)
+      : filter === 'hard'
+        ? (a, b) => a.p.s - b.p.s
+        : () => 0;
+  shown.sort((a, b) => order(a, b) || a.e.rank - b.e.rank);
 
   if (!shown.length) {
     fill(listEl, h('p', { class: 'empty' }, emptyMessage()));
@@ -153,7 +184,7 @@ function update() {
                 h('span', { class: 'row-en' }, r.e.en),
               ),
               h('span', { class: `pill is-${r.st}` }, STATUS_LABEL[r.st]),
-              h('span', { class: `score is-${r.st}`, 'aria-label': `Score ${r.p?.s ?? 0}` }, scoreLabel(r.p?.s ?? 0)),
+              h('span', { class: `when is-${r.st}${r.due ? ' is-due' : ''}` }, whenLabel(r, now)),
             ),
           ),
         ),
@@ -180,10 +211,21 @@ function pct(n, total) {
 
 function emptyMessage() {
   if (query) return 'No words match that search.';
+  if (filter === 'due') return 'Nothing is due right now.';
   if (filter === 'hard') return 'No hard words. Tap a word in a text to mark it.';
   if (filter === 'learning' || filter === 'known')
     return 'Nothing here yet. Finish a text and the words you read will appear.';
   return 'No words in this group.';
+}
+
+/** One line saying where a word stands on the schedule. */
+function schedule(p, st, now) {
+  if (st === 'new') return 'Not met yet.';
+  if (st === 'hard') {
+    return `Needs ${plural(-p.s, 'clean read')} before it goes back on the schedule.`;
+  }
+  const gap = `interval ${span(intervalOf(p))}`;
+  return p.due <= now ? `Due now · ${gap}` : `Due in ${span((p.due - now) / DAY)} · ${gap}`;
 }
 
 function openDetail(id) {
@@ -194,6 +236,7 @@ function openDetail(id) {
     const p = store.progressOf(id);
     const st = statusOf(p);
     const now = Date.now();
+    const rules = rulesOf(store.state.prefs);
     const set = (next) => {
       store.setProgress(id, next);
       draw();
@@ -234,12 +277,18 @@ function openDetail(id) {
           ),
       ),
       h('div', { class: 'edit-row' }, input, h('button', { class: 'btn', type: 'button', onclick: save }, 'Save')),
+      h('p', { class: 'wd-meta' }, h('span', { class: `pill is-${st}` }, STATUS_LABEL[st]), ' ', schedule(p, st, now)),
+      hasMemory(p) &&
+        h(
+          'p',
+          { class: 'wd-src' },
+          `Memory strength ${span(p.S)} · difficulty ${p.D.toFixed(1)} of 10 · recall chance now ${Math.round(recallChance(p, now) * 100)}%`,
+        ),
       h(
         'p',
-        { class: 'wd-meta' },
-        h('span', { class: `pill is-${st}` }, STATUS_LABEL[st]),
-        ` Score ${scoreLabel(p?.s ?? 0)} · seen ${plural(p?.n ?? 0, 'time')} · looked up ${plural(p?.l ?? 0, 'time')}`,
-        p?.t ? ` · last seen ${timeAgo(p.t)}` : '',
+        { class: 'wd-src' },
+        `Seen ${plural(p?.n ?? 0, 'time')} · looked up ${plural(p?.l ?? 0, 'time')}`,
+        p?.t ? ` · last reviewed ${timeAgo(p.t)}` : '',
       ),
       h('p', { class: 'wd-src' }, `From: ${e.src}`),
       h(
@@ -248,7 +297,7 @@ function openDetail(id) {
         st === 'hard'
           ? h(
               'button',
-              { class: 'btn', type: 'button', onclick: () => set(clearHard(p, now)) },
+              { class: 'btn', type: 'button', onclick: () => set(clearHard(p, now, rules)) },
               icon('check', 18),
               'I know this now',
             )
@@ -257,13 +306,13 @@ function openDetail(id) {
               {
                 class: 'btn btn-hard',
                 type: 'button',
-                onclick: () => set(markHard(p, now, hardStepOf(store.state.prefs), maxHardOf(store.state.prefs))),
+                onclick: () => set(markHard(p, now, rules)),
               },
               icon('flag', 18),
               'Mark as hard',
             ),
         st !== 'known' &&
-          h('button', { class: 'btn', type: 'button', onclick: () => set(markKnown(p, now)) }, 'Mark as known'),
+          h('button', { class: 'btn', type: 'button', onclick: () => set(markKnown(p, now, rules)) }, 'Mark as known'),
         st !== 'new' &&
           h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => set(resetWord(now)) }, 'Reset'),
       ),

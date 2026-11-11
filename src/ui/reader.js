@@ -6,15 +6,16 @@ import { normKey } from '../lib/words.js';
 import {
   cleanRead,
   clearHard,
-  hardStepOf,
+  hardRead,
+  isDue,
   lookedUp,
   markHard,
-  maxHardOf,
   pickTargets,
   resetWord,
+  rulesOf,
   seen,
-  statusOf,
 } from '../lib/scoring.js';
+import { hasMemory } from '../lib/srs.js';
 import { SentenceStream, segmentSentence } from '../lib/textparse.js';
 import { LENGTHS, LEVELS, TOPICS, buildUserPrompt } from '../lib/prompt.js';
 import { DEFAULT_PREFS } from '../lib/merge.js';
@@ -224,23 +225,30 @@ function segmented(options, current, onPick, label) {
 }
 
 function infoLine() {
+  const now = Date.now();
   let hard = 0;
-  let met = 0;
+  let due = 0;
   for (const e of store.index.list) {
-    const st = statusOf(store.progressOf(e.id));
-    if (st === 'hard') hard++;
-    if (st !== 'new') met++;
+    const p = store.progressOf(e.id);
+    if (!p) continue;
+    if (p.s < 0) hard++;
+    else if (e.priority && isDue(p, now)) due++;
   }
-  const total = store.index.list.length;
-  const waiting = hard ? `${plural(hard, 'hard word')} waiting to come back` : 'No hard words yet';
-  return `${waiting} · ${met.toLocaleString('en')} of ${plural(total, 'word')} met so far`;
+  const fresh = store.newLeft();
+  if (!hard && !due && !fresh) return 'Nothing is due right now. The next text practises the words due soonest.';
+  return [
+    `${plural(hard, 'hard word')}`,
+    `${due.toLocaleString('en')} due`,
+    `${plural(fresh, 'new word')} left today`,
+  ].join(' · ');
 }
 
 function renderSummary() {
   const parts = [];
-  if (summary.credit) parts.push(`${plural(summary.up, 'word')} moved up a step`);
+  if (summary.credit) parts.push(`${plural(summary.up, 'word')} reviewed`);
   else parts.push('Text skipped, nothing counted as read');
   if (summary.hard) parts.push(`${plural(summary.hard, 'word')} marked hard`);
+  if (summary.started) parts.push(`${plural(summary.started, 'new word')} started`);
   return h('p', { class: 'notice is-good', role: 'status' }, icon('check', 18), parts.join(' · '));
 }
 
@@ -250,14 +258,17 @@ async function generate() {
   if (abort) return;
   const prefs = store.state.prefs;
   const length = LENGTHS[prefs.length] ? prefs.length : 'medium';
-  const targets = pickTargets(store.index.list, store.state.progress, LENGTHS[length].targets);
+  const targets = pickTargets(store.index.list, store.state.progress, LENGTHS[length].targets, {
+    now: Date.now(),
+    newLeft: store.newLeft(),
+  });
 
   summary = null;
   error = '';
   text = {
     title: '',
     level: prefs.level,
-    targets: targets.map((t) => ({ id: t.entry.id, hard: t.hard })),
+    targets: targets.map((t) => ({ id: t.entry.id, hard: t.hard, kind: t.kind })),
     sentences: [],
     hard: {}, // word id -> its progress before it was flagged in this text
     tapped: {}, // word ids looked up in this text
@@ -336,11 +347,14 @@ function renderText() {
   paintListenBtn();
   renderFooter();
 
-  const hardTargets = text.targets.filter((t) => t.hard).length;
-  const meta = [
-    text.level,
-    plural(text.targets.length, 'target word') + (hardTargets ? `, ${hardTargets} of them hard` : ''),
-  ];
+  // What the text was built from: "12 target words: 7 hard, 2 due, 3 new".
+  const kinds = { hard: 0, due: 0, new: 0, early: 0 };
+  for (const t of text.targets) kinds[t.kind || (t.hard ? 'hard' : 'due')]++;
+  const mix = Object.entries(kinds)
+    .filter(([, n]) => n)
+    .map(([kind, n]) => `${n} ${kind}`)
+    .join(', ');
+  const meta = [text.level, plural(text.targets.length, 'target word') + (mix ? `: ${mix}` : '')];
 
   return h(
     'article',
@@ -488,8 +502,7 @@ function flag(word) {
   const before = store.progressOf(entry.id) || null;
   text.hard[entry.id] = before;
   text.tapped[entry.id] = true;
-  const prefs = store.state.prefs;
-  store.setProgress(entry.id, markHard(before, Date.now(), hardStepOf(prefs), maxHardOf(prefs)));
+  store.setProgress(entry.id, markHard(before, Date.now(), rulesOf(store.state.prefs)));
   saveText();
 }
 
@@ -560,7 +573,7 @@ function wordSheet(word, si) {
             {
               class: 'btn',
               type: 'button',
-              onclick: () => (store.setProgress(id, clearHard(p, Date.now())), draw()),
+              onclick: () => (store.setProgress(id, clearHard(p, Date.now(), rulesOf(store.state.prefs))), draw()),
             },
             icon('check', 18),
             'I know this now',
@@ -631,8 +644,10 @@ function toggleListening() {
 // ---- finishing -------------------------------------------------------------
 
 /**
- * Close the text. With `credit`, every list word that appeared and was not
- * tapped moves up a step; tapped and flagged words only record the sighting.
+ * Close the text and reschedule its words. With `credit`, every list word that
+ * appeared counts as a review: a clean read if it was not tapped ("Good" in
+ * Anki), a weaker one if it was looked up ("Hard"). Words marked hard were
+ * dealt with when they were marked. Without `credit` nothing is rescheduled.
  */
 function finish(credit) {
   stopListening();
@@ -657,19 +672,26 @@ function finish(credit) {
     if (phrase.split(' ').some((part) => text.surfaces[part])) tappedPhrase.add(e.id);
   }
 
+  const rules = rulesOf(store.state.prefs);
   const updates = {};
   let up = 0;
   for (const id of present) {
     const p = store.progressOf(id);
-    if (id in text.hard || text.tapped[id] || tappedPhrase.has(id)) {
-      updates[id] = seen(p, now);
-    } else if (credit) {
-      updates[id] = cleanRead(p, now);
+    if (id in text.hard) updates[id] = seen(p, now);
+    else if (text.tapped[id] || tappedPhrase.has(id)) updates[id] = credit ? hardRead(p, now, rules) : seen(p, now);
+    else if (credit) {
+      updates[id] = cleanRead(p, now, rules);
       up++;
     }
   }
 
-  summary = { credit, up, hard: Object.keys(text.hard).length };
+  // New words that this text got going count towards today's allowance.
+  const started = text.targets.filter(
+    (t) => t.kind === 'new' && hasMemory(updates[t.id] || store.progressOf(t.id)),
+  ).length;
+  store.addIntroduced(started);
+
+  summary = { credit, up, hard: Object.keys(text.hard).length, started };
   rememberTitle(text.title);
   text = null;
   saveText();

@@ -13,7 +13,8 @@
     "@anthropic-ai/sdk": "^1.7.0",
     "fflate": "^0.8.3",
     "fzstd": "^0.1.1",
-    "sql.js": "^1.16.0"
+    "sql.js": "^1.16.0",
+    "ts-fsrs": "^5.4.2"
   },
   "devDependencies": {
     "vite": "^8.3.7"

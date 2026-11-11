@@ -4,6 +4,7 @@
 import { buildWordIndex, normKey, parseWordList } from './lib/words.js';
 import { emptyState, mergeStates, sanitizeState, stableStringify } from './lib/merge.js';
 import { capHardness, maxHardOf } from './lib/scoring.js';
+import { dayKey, newPerDayOf } from './lib/srs.js';
 import { createGist, findGist, readGist, writeGist } from './gist.js';
 import common1 from './data/common-1.txt?raw';
 import common2 from './data/common-2.txt?raw';
@@ -133,6 +134,22 @@ export const store = {
     this.state.resetAt = Date.now();
     persist();
     this.emit('progress');
+    this.syncSoon();
+  },
+
+  /** How many more new words may be started today. */
+  newLeft() {
+    const { day, n } = this.state.intro;
+    return Math.max(0, newPerDayOf(this.state.prefs) - (day === dayKey(Date.now()) ? n : 0));
+  },
+
+  /** Record that `count` new words were started today. */
+  addIntroduced(count) {
+    if (!count) return;
+    const today = dayKey(Date.now());
+    const { day, n } = this.state.intro;
+    this.state.intro = { day: today, n: (day === today ? n : 0) + count };
+    persist();
     this.syncSoon();
   },
 
