@@ -7,7 +7,7 @@ import { LEVELS } from '../lib/prompt.js';
 import { HARD_SHARE, MAX_HARD_CHOICES, hardStepChoices, hardStepOf, maxHardOf } from '../lib/scoring.js';
 import { NEW_PER_DAY_CHOICES, RETENTION_CHOICES, newPerDayOf, retentionOf } from '../lib/srs.js';
 import { tts } from '../tts.js';
-import { pickDeckFile } from './import.js';
+import { pickDeckFile, updateFromAnki } from './import.js';
 
 const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=gist&description=German%20Text%20Study%20sync';
 const KEY_URL = 'https://platform.claude.com/settings/keys';
@@ -18,12 +18,14 @@ let syncEl;
 let voiceEl;
 let rulesEl;
 let hardEl;
+let ankiEl;
 
 export function mountSettings(el) {
   root = el;
   render();
   store.subscribe((what) => {
     if (what === 'words') drawSources();
+    if (what === 'prefs') drawAnki();
     if (what === 'sync' || what === 'local') drawSync();
   });
   tts.onVoices(drawVoices);
@@ -45,6 +47,7 @@ function render() {
   voiceEl = h('div');
   rulesEl = h('ul', { class: 'help-list' });
   hardEl = h('div');
+  ankiEl = h('div');
 
   const keyInput = h('input', {
     class: 'input',
@@ -184,6 +187,7 @@ function render() {
     card(
       'Word lists',
       sourcesEl,
+      ankiEl,
       h(
         'div',
         { class: 'btn-row' },
@@ -192,7 +196,7 @@ function render() {
       h(
         'p',
         { class: 'help' },
-        'Choose an Anki .apkg or .colpkg file, or a “Notes in Plain Text” export. Words that are also in the built-in list are merged, so nothing appears twice.',
+        'For a first import or another deck: choose an Anki .apkg or .colpkg file, or a “Notes in Plain Text” export, and confirm the fields. Words that are also in the built-in list are merged, so nothing appears twice.',
       ),
     ),
 
@@ -228,6 +232,32 @@ function render() {
   drawVoices();
   drawHardness();
   drawRules();
+  drawAnki();
+}
+
+/** Once a deck has been read from an Anki file, offer to bring it up to date in one step. */
+function drawAnki() {
+  if (!ankiEl) return;
+  const anki = store.state.prefs.anki;
+  if (!anki) return fill(ankiEl);
+  fill(
+    ankiEl,
+    h(
+      'div',
+      { class: 'btn-row' },
+      h(
+        'button',
+        { class: 'btn btn-primary', type: 'button', onclick: updateFromAnki },
+        icon('upload', 18),
+        'Update from Anki',
+      ),
+    ),
+    h(
+      'p',
+      { class: 'help' },
+      `Export your collection from Anki (a .colpkg file) and choose it here. The app reads “${anki.name}” the same way as last time and takes over every word Anki has reviewed since, without asking again. Last updated ${timeAgo(anki.at)}.`,
+    ),
+  );
 }
 
 const reads = (n) => `${n} clean ${n === 1 ? 'read' : 'reads'}`;

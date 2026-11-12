@@ -20,6 +20,8 @@ export const DEFAULT_PREFS = {
   newPerDay: DEFAULT_NEW_PER_DAY,
   // Names of the word lists the learner has turned off.
   listsOff: [],
+  // Set after the first import from an Anki file: see sanitizeState.
+  anki: null,
   rate: 0.85,
   u: 0,
 };
@@ -82,6 +84,20 @@ export function sanitizeState(raw) {
     base.prefs = { ...DEFAULT_PREFS, ...raw.prefs, u: Number(raw.prefs.u) || 0 };
     const off = raw.prefs.listsOff;
     base.prefs.listsOff = Array.isArray(off) ? off.filter((x) => typeof x === 'string') : [];
+    // The deck and fields last used to read an Anki file.
+    const a = raw.prefs.anki;
+    const usable =
+      isObj(a) && typeof a.type === 'string' && typeof a.de === 'string' && Array.isArray(a.en) && a.en.length > 0;
+    base.prefs.anki = usable
+      ? {
+          type: a.type,
+          deck: typeof a.deck === 'string' ? a.deck : '',
+          de: a.de,
+          en: a.en.filter((x) => typeof x === 'string'),
+          name: typeof a.name === 'string' && a.name ? a.name : 'Imported deck',
+          at: Number(a.at) || 0,
+        }
+      : null;
   }
   return base;
 }
@@ -123,4 +139,78 @@ export function stableStringify(value) {
       .join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+// ---- past texts ------------------------------------------------------------
+//
+// Finished texts are kept so they can be read again. They sync as a file of
+// their own, so that ordinary progress syncs stay small.
+
+/** How many past texts are kept. */
+export const HISTORY_LIMIT = 30;
+
+export function emptyHistory() {
+  return { clearedAt: 0, texts: [] };
+}
+
+/** A text as it is stored: words as [spelling, dictionary form, meaning] to save space. */
+export function packText({ id, at, title, level, hard, sentences }) {
+  return {
+    id,
+    at,
+    title: title || '',
+    level: level || '',
+    hard: hard || 0,
+    sentences: sentences.map((s) => ({ de: s.de, en: s.en, br: !!s.br, w: s.words.map((x) => [x.w, x.l, x.g]) })),
+  };
+}
+
+/** The sentences of a stored text, in the form the reader displays. */
+export function unpackSentences(entry) {
+  return entry.sentences.map((s) => ({
+    de: s.de,
+    en: s.en,
+    br: s.br,
+    words: s.w.map(([w, l, g]) => ({ w, l, g })),
+  }));
+}
+
+/** Accept anything parsed from storage or a gist and return a well-formed history. */
+export function sanitizeHistory(raw) {
+  const out = emptyHistory();
+  if (!raw || typeof raw !== 'object') return out;
+  out.clearedAt = Number(raw.clearedAt) || 0;
+  const text = (x) => (typeof x === 'string' ? x : '');
+  for (const t of Array.isArray(raw.texts) ? raw.texts : []) {
+    if (!t || typeof t.id !== 'string' || !Array.isArray(t.sentences)) continue;
+    const sentences = t.sentences
+      .filter((s) => s && typeof s.de === 'string' && Array.isArray(s.w))
+      .map((s) => ({
+        de: s.de,
+        en: text(s.en),
+        br: !!s.br,
+        w: s.w.filter((x) => Array.isArray(x) && typeof x[0] === 'string').map((x) => [x[0], text(x[1]), text(x[2])]),
+      }));
+    if (!sentences.length) continue;
+    out.texts.push({
+      id: t.id,
+      at: Number(t.at) || 0,
+      title: text(t.title),
+      level: text(t.level),
+      hard: Number(t.hard) || 0,
+      sentences,
+    });
+  }
+  return mergeHistories(out, emptyHistory());
+}
+
+/** Both devices' texts, newest first, without the ones cleared, up to the limit. */
+export function mergeHistories(a, b) {
+  const clearedAt = Math.max(a.clearedAt || 0, b.clearedAt || 0);
+  const byId = new Map();
+  for (const t of [...a.texts, ...b.texts]) {
+    if (t.at > clearedAt && !byId.has(t.id)) byId.set(t.id, t);
+  }
+  const texts = [...byId.values()].sort((x, y) => y.at - x.at || (x.id < y.id ? -1 : 1)).slice(0, HISTORY_LIMIT);
+  return { clearedAt, texts };
 }

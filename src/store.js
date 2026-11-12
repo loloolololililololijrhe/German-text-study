@@ -2,10 +2,18 @@
 // on this device (keys, tokens), and the sync loop that reconciles the two.
 
 import { buildWordIndex, listNames, normKey, parseWordList, withoutLists } from './lib/words.js';
-import { emptyState, mergeStates, sanitizeState, stableStringify } from './lib/merge.js';
+import {
+  emptyState,
+  mergeHistories,
+  mergeStates,
+  packText,
+  sanitizeHistory,
+  sanitizeState,
+  stableStringify,
+} from './lib/merge.js';
 import { capHardness, maxHardOf } from './lib/scoring.js';
 import { dayKey, newPerDayOf } from './lib/srs.js';
-import { createGist, findGist, readGist, writeGist } from './gist.js';
+import { GIST_FILE, TEXTS_FILE, createGist, findGist, readGist, writeGist } from './gist.js';
 import common1 from './data/common-1.txt?raw';
 import common2 from './data/common-2.txt?raw';
 import common3 from './data/common-3.txt?raw';
@@ -14,6 +22,7 @@ import defaultDeck from './data/deck.json';
 
 const STATE_KEY = 'gts.state';
 const LOCAL_KEY = 'gts.local';
+const TEXTS_KEY = 'gts.texts';
 export const BUILTIN_SRC = 'Common words';
 // deck.json is either a plain list of words or { name, words }.
 const deckWords = Array.isArray(defaultDeck) ? defaultDeck : defaultDeck.words || [];
@@ -44,6 +53,8 @@ export const store = {
   state: sanitizeState(read(STATE_KEY)),
   // Device-only: never leaves this browser.
   local: { apiKey: '', ghToken: '', gistId: '', voice: '', lastSync: 0, ...(read(LOCAL_KEY) || {}) },
+  // Finished texts, newest first, kept for re-reading.
+  history: sanitizeHistory(read(TEXTS_KEY)),
   index: null,
   sync: { status: 'off', message: '' },
 
@@ -179,6 +190,31 @@ export const store = {
     this.syncSoon();
   },
 
+  /** Keep a finished text so it can be read again. */
+  addText({ title, level, sentences, hard }) {
+    const at = Date.now();
+    const entry = packText({
+      id: `${at}-${Math.random().toString(36).slice(2, 8)}`,
+      at,
+      title,
+      level,
+      hard,
+      sentences,
+    });
+    this.history = mergeHistories({ clearedAt: this.history.clearedAt, texts: [entry] }, this.history);
+    write(TEXTS_KEY, this.history);
+    this.emit('history');
+    this.syncSoon();
+  },
+
+  /** Forget all past texts, on all synced devices. */
+  clearHistory() {
+    this.history = { clearedAt: Date.now(), texts: [] };
+    write(TEXTS_KEY, this.history);
+    this.emit('history');
+    this.syncSoon();
+  },
+
   customCount() {
     return Object.keys(this.state.custom).length;
   },
@@ -204,12 +240,14 @@ export const store = {
     try {
       let id = this.local.gistId || (await findGist(token));
       if (!id) {
-        id = await createGist(token, this.state);
+        id = await createGist(token, { [GIST_FILE]: this.state, [TEXTS_FILE]: this.history });
         this.setLocal({ gistId: id, lastSync: Date.now() });
       } else {
         if (id !== this.local.gistId) this.setLocal({ gistId: id });
-        const remoteRaw = await readGist(token, id);
-        const remote = remoteRaw ? sanitizeState(remoteRaw) : emptyState();
+        const files = await readGist(token, id);
+        const changed = {};
+
+        const remote = files[GIST_FILE] ? sanitizeState(files[GIST_FILE]) : emptyState();
         const merged = mergeStates(this.state, remote);
         // Another device may still have had a higher limit on hardness.
         Object.assign(merged.progress, capHardness(merged.progress, maxHardOf(merged.prefs), Date.now()));
@@ -220,7 +258,23 @@ export const store = {
           persist();
           this.emit('words');
         }
-        if (!remoteRaw || mergedText !== stableStringify(remote)) await writeGist(token, id, merged);
+        if (!files[GIST_FILE] || mergedText !== stableStringify(remote)) changed[GIST_FILE] = merged;
+
+        // Past texts: the union of both sides.
+        const remoteTexts = sanitizeHistory(files[TEXTS_FILE]);
+        const mergedTexts = mergeHistories(this.history, remoteTexts);
+        const textsText = stableStringify(mergedTexts);
+        if (textsText !== stableStringify(this.history)) {
+          this.history = mergedTexts;
+          write(TEXTS_KEY, this.history);
+          this.emit('history');
+        }
+        const nothingYet = !files[TEXTS_FILE] && !mergedTexts.texts.length && !mergedTexts.clearedAt;
+        if (!nothingYet && (!files[TEXTS_FILE] || textsText !== stableStringify(remoteTexts))) {
+          changed[TEXTS_FILE] = mergedTexts;
+        }
+
+        if (Object.keys(changed).length) await writeGist(token, id, changed);
         this.setLocal({ lastSync: Date.now() });
       }
       setSync('idle');

@@ -26,8 +26,8 @@ async function parseFile(file) {
   return parseAnkiText(new TextDecoder('utf-8').decode(bytes));
 }
 
-/** Open the file picker. Must be called from a click handler. */
-export function pickDeckFile() {
+/** Open the file picker and hand the parsed file on. Must be called from a click handler. */
+function pickFile(then) {
   // Off-screen rather than hidden: some mobile browsers ignore click() on a
   // file input that is not rendered.
   const input = h('input', {
@@ -43,14 +43,95 @@ export function pickDeckFile() {
     if (!file) return;
     toast('Reading the deck…');
     try {
-      const parsed = await parseFile(file);
-      openMapping(parsed, file.name.replace(/\.[^.]+$/, ''));
+      then(await parseFile(file), file.name.replace(/\.[^.]+$/, ''));
     } catch (err) {
       toast(err.message || 'Could not read this file.');
     }
   });
   document.body.append(input);
   input.click();
+}
+
+/** Import a deck: choose the file, then confirm the deck and fields. */
+export function pickDeckFile() {
+  pickFile(openMapping);
+}
+
+/**
+ * Bring the app up to date with Anki in one step: choose the exported
+ * collection, and the deck and fields used last time are read again. If the
+ * file does not have them, the usual dialog opens instead.
+ */
+export function updateFromAnki() {
+  pickFile((parsed, fileName) => {
+    const saved = store.state.prefs.anki;
+    const type =
+      saved &&
+      (parsed.noteTypes.find((t) => t.name === saved.type && t.deck === saved.deck) ||
+        parsed.noteTypes.find((t) => t.name === saved.type));
+    const de = type ? type.fields.indexOf(saved.de) : -1;
+    const en = type ? saved.en.map((name) => type.fields.indexOf(name)) : [];
+    if (!type || de < 0 || !en.length || en.some((i) => i < 0)) {
+      toast('This file does not have the deck used last time. Choose it here.');
+      openMapping(parsed, fileName);
+      return;
+    }
+    const plan = planImport(type, { de, en });
+    const { added, marked } = applyImport(plan, saved.name, true);
+    rememberAnki(type, { de, en }, saved.name);
+    toast(
+      [added && `${plural(added, 'new word')} added`, marked && `${plural(marked, 'word')} updated from Anki`]
+        .filter(Boolean)
+        .join(' · ') || 'Already up to date with Anki',
+    );
+  });
+}
+
+/** What importing these fields of a deck would do: the words, and where Anki is ahead of the app. */
+function planImport(type, mapping) {
+  const { words, skipped } = extractWords(type, mapping.de, mapping.en);
+  const listed = words.map((w, i) => ({ ...w, id: normKey(w.de), rank: i }));
+  // A deck word the list already holds, word for word, needs no second copy.
+  const fresh = listed.filter((w) => {
+    const e = store.index.byId.get(w.id);
+    return !(e && e.priority && e.de === w.de && e.en === w.en);
+  });
+  // What Anki knows about these words, for the ones where it is ahead of this app.
+  const fromDeck = listed.filter((w) => w.study && ankiIsNewer(store.progressOf(w.id), w.study));
+  return { words, skipped, listed, fresh, fromDeck };
+}
+
+/** Add the new words to the list `src` and, with `useProgress`, take over Anki's schedule. */
+function applyImport({ fresh, fromDeck }, src, useProgress) {
+  // Importing into a list that was turned off turns it back on.
+  if (fresh.length && store.isListOff(src)) store.setListOn(src, true);
+  const added = fresh.length ? store.addCustom(fresh.map((w) => ({ de: w.de, en: w.en, src, rank: w.rank }))) : 0;
+  // Anki's record replaces the app's only where Anki is ahead.
+  const updates = {};
+  if (useProgress) {
+    const now = Date.now();
+    const rules = rulesOf(store.state.prefs);
+    for (const w of fromDeck) updates[w.id] = fromAnki(w.study, now, rules);
+  }
+  const marked = Object.keys(updates).length;
+  if (marked) store.setProgressMany(updates);
+  store.syncNow();
+  return { added, marked };
+}
+
+/** Remember which deck and fields an Anki file was read with, for "Update from Anki". */
+function rememberAnki(type, mapping, name) {
+  if (!Array.isArray(type.study)) return; // a text file, not an Anki package
+  store.updatePrefs({
+    anki: {
+      type: type.name,
+      deck: type.deck || '',
+      de: type.fields[mapping.de],
+      en: mapping.en.map((i) => type.fields[i]),
+      name,
+      at: Date.now(),
+    },
+  });
 }
 
 function openMapping(parsed, fileName) {
@@ -84,17 +165,10 @@ function openMapping(parsed, fileName) {
     const type = parsed.noteTypes[typeIndex];
     const choices = fieldChoices(type);
     const enChoice = choices.findIndex((c) => c.fields.join() === mapping.en.join());
-    const { words, skipped } = extractWords(type, mapping.de, mapping.en);
-    const listed = words.map((w, i) => ({ ...w, id: normKey(w.de), rank: i }));
-    // A deck word the list already holds, word for word, needs no second copy.
-    const fresh = listed.filter((w) => {
-      const e = store.index.byId.get(w.id);
-      return !(e && e.priority && e.de === w.de && e.en === w.en);
-    });
+    const plan = planImport(type, mapping);
+    const { words, skipped, listed, fresh, fromDeck } = plan;
     const already = listed.length - fresh.length;
-    // What Anki knows about these words, for the ones where it is ahead of this app.
     const now = Date.now();
-    const fromDeck = listed.filter((w) => w.study && ankiIsNewer(store.progressOf(w.id), w.study));
     const relearning = fromDeck.filter((w) => w.study.hard).length;
     const scheduled = fromDeck.length - relearning;
     const dueNow = fromDeck.filter((w) => !w.study.hard && w.study.due <= now).length;
@@ -223,26 +297,14 @@ function openMapping(parsed, fileName) {
             disabled: !words.length,
             onclick: () => {
               const src = nameInput.value.trim() || 'Imported deck';
-              // Importing into a list that was turned off turns it back on.
-              if (fresh.length && store.isListOff(src)) store.setListOn(src, true);
-              const added = fresh.length
-                ? store.addCustom(fresh.map((w) => ({ de: w.de, en: w.en, src, rank: w.rank })))
-                : 0;
-              // Anki's record replaces the app's only where Anki is ahead.
-              const updates = {};
-              if (useProgress) {
-                const rules = rulesOf(store.state.prefs);
-                for (const w of fromDeck) updates[w.id] = fromAnki(w.study, now, rules);
-              }
-              const marked = Object.keys(updates).length;
-              if (marked) store.setProgressMany(updates);
+              const { added, marked } = applyImport(plan, src, useProgress);
+              rememberAnki(type, mapping, src);
               dialog.close();
               toast(
                 [added && `Imported ${plural(added, 'word')}`, marked && `${plural(marked, 'word')} updated from Anki`]
                   .filter(Boolean)
                   .join(' · ') || 'Nothing new to import',
               );
-              store.syncNow();
             },
           },
           'Import',

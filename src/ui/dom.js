@@ -43,6 +43,7 @@ const PATHS = {
   upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
 };
 
 export function icon(name, size = 20) {

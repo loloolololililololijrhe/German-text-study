@@ -18,6 +18,10 @@ words you find hard come back more often until they stick.
    translate the whole sentence. `Listen` reads the text aloud.
 5. Press **Done reading** when you finish.
 
+The **History** tab keeps the last 30 texts you finished, so you can read them
+again. Reading a past text does not reschedule its words; marking a word hard
+there still counts.
+
 ### Your Anki deck
 
 The app ships with the Refold DE1K deck built in (997 words, in the deck's
@@ -34,9 +38,16 @@ them if needed, and the words are added to the list.
 Importing your own collection also brings your Anki progress with it. With
 **Use my Anki progress** on, every word you have studied in Anki carries on
 from where Anki left it: the same memory strength, last review and due date.
-Words Anki is still teaching you come in as hard words. Importing again later
-takes over the words Anki has reviewed since; words you reviewed more recently
-in the app are left alone. (The app cannot write back to Anki.)
+Words Anki is still teaching you come in as hard words.
+
+After the first import, **Update from Anki** brings the app up to date in one
+step: export your collection from Anki again, choose the file, and the app
+reads the same deck and fields as before and takes over every word Anki has
+reviewed since. Words you reviewed more recently in the app are left alone.
+
+This file is the only link to Anki. A website cannot sign in to AnkiWeb, and
+the AnkiConnect add-on only works with Anki open on a computer, so there is no
+automatic sync, and the app cannot write back to Anki.
 
 Every list under **Settings → Word lists** has a switch. Turning a list off
 leaves its words out of your word list and your texts, for example the common
@@ -51,9 +62,10 @@ site are public.
 ### Sync between devices
 
 **Settings → Sync between devices**: create a GitHub token with only the `gist`
-permission and paste it in on each device. Scores, imported words and
-preferences are stored in a private gist on your account and merged every time
-the app opens or you finish a text. The Claude API key is never synced.
+permission and paste it in on each device. Your schedule, imported words,
+preferences and past texts are stored in a private gist on your account and
+merged every time the app opens or you finish a text. The Claude API key is
+never synced.
 
 ## How words come back
 
@@ -125,7 +137,7 @@ The code is plain JavaScript modules built with Vite.
   (`prompt.js`),
   stream parsing (`textparse.js`), Anki import (`anki.js`) and sync merging
   (`merge.js`). `tests/` covers all of it.
-- `src/ui/` holds the three screens, `src/claude.js` the Claude API call and
+- `src/ui/` holds the four screens and the shared text view, `src/claude.js` the Claude API call and
   `src/gist.js` the sync storage.
 - `src/data/common-*.txt` is the built-in word list, one `German = English`
   per line, most frequent first.

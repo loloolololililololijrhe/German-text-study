@@ -2,12 +2,14 @@ import './styles.css';
 import { store } from './store.js';
 import { createSheet, h, icon, timeAgo } from './ui/dom.js';
 import { leaveReader, mountReader, showReader } from './ui/reader.js';
+import { leaveHistory, mountHistory, showHistory } from './ui/history.js';
 import { leaveWords, mountWords, showWords } from './ui/wordlist.js';
 import { mountSettings, showSettings } from './ui/settings.js';
 import { tts } from './tts.js';
 
 const TABS = [
   { id: 'read', label: 'Read', icon: 'book', show: showReader, leave: leaveReader },
+  { id: 'history', label: 'History', icon: 'clock', show: showHistory, leave: leaveHistory },
   { id: 'words', label: 'Words', icon: 'list', show: showWords, leave: leaveWords },
   { id: 'settings', label: 'Settings', icon: 'sliders', show: showSettings },
 ];
@@ -74,6 +76,7 @@ document.getElementById('app').replaceChildren(
 );
 
 mountReader(views.read, { sheet, openSettings: () => go('settings') });
+mountHistory(views.history, { sheet });
 mountWords(views.words, { sheet });
 mountSettings(views.settings);
 

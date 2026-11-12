@@ -2,6 +2,8 @@
 
 const API = 'https://api.github.com';
 export const GIST_FILE = 'german-text-study.json';
+/** Past texts live in a second file of the same gist, so progress syncs stay small. */
+export const TEXTS_FILE = 'german-text-study-texts.json';
 const DESCRIPTION = 'German Text Study progress (synced automatically by the app)';
 
 export class GistError extends Error {
@@ -51,39 +53,43 @@ export async function findGist(token) {
   return null;
 }
 
-export async function createGist(token, state) {
+const asFiles = (files) =>
+  Object.fromEntries(Object.entries(files).map(([name, value]) => [name, { content: JSON.stringify(value) }]));
+
+/** Create the gist with the given files: { fileName: object }. */
+export async function createGist(token, files) {
   const g = await gh(token, '/gists', {
     method: 'POST',
-    body: JSON.stringify({
-      description: DESCRIPTION,
-      public: false,
-      files: { [GIST_FILE]: { content: JSON.stringify(state) } },
-    }),
+    body: JSON.stringify({ description: DESCRIPTION, public: false, files: asFiles(files) }),
   });
   return g.id;
 }
 
-/** Returns the stored state object, or null when the file is missing or unreadable. */
+/** The parsed content of each of the app's files: { fileName: object | null }. */
 export async function readGist(token, id) {
   const g = await gh(token, `/gists/${id}`);
-  const file = g.files?.[GIST_FILE];
-  if (!file) return null;
-  let content = file.content;
-  if (file.truncated && file.raw_url) {
-    const res = await fetch(file.raw_url);
-    if (!res.ok) throw new GistError(res.status, 'Could not download the synced data from GitHub.');
-    content = await res.text();
+  const out = {};
+  for (const name of [GIST_FILE, TEXTS_FILE]) {
+    const file = g.files?.[name];
+    out[name] = null;
+    if (!file) continue;
+    let content = file.content;
+    // GitHub cuts long files off in this response and serves them whole elsewhere.
+    if (file.truncated && file.raw_url) {
+      const res = await fetch(file.raw_url);
+      if (!res.ok) throw new GistError(res.status, 'Could not download the synced data from GitHub.');
+      content = await res.text();
+    }
+    try {
+      out[name] = JSON.parse(content);
+    } catch {
+      /* unreadable: treated as missing */
+    }
   }
-  try {
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
+  return out;
 }
 
-export async function writeGist(token, id, state) {
-  await gh(token, `/gists/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(state) } } }),
-  });
+/** Write the given files, leaving the gist's other files as they are. */
+export async function writeGist(token, id, files) {
+  await gh(token, `/gists/${id}`, { method: 'PATCH', body: JSON.stringify({ files: asFiles(files) }) });
 }
