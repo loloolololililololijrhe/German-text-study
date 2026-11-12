@@ -6,7 +6,7 @@ import { cleanRead, hardRead, isDue, pickTargets, rulesOf, seen } from '../lib/s
 import { hasMemory } from '../lib/srs.js';
 import { SentenceStream } from '../lib/textparse.js';
 import { createTextView } from './textview.js';
-import { LENGTHS, LEVELS, TOPICS, buildUserPrompt } from '../lib/prompt.js';
+import { FORMS, LENGTHS, LEVELS, TOPICS, buildUserPrompt } from '../lib/prompt.js';
 import { DEFAULT_PREFS } from '../lib/merge.js';
 
 const TEXT_KEY = 'gts.text';
@@ -147,6 +147,22 @@ function renderGenerator() {
     h(
       'div',
       { class: 'field' },
+      h('span', { class: 'label' }, 'Form'),
+      segmented(
+        Object.entries(FORMS).map(([id, f]) => ({ id, label: f.label })),
+        FORMS[prefs.form] ? prefs.form : 'prose',
+        (id) => store.updatePrefs({ form: id }),
+        'Form',
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        'Text is a story or report. Play is written as lines spoken between people, with the name before each line.',
+      ),
+    ),
+    h(
+      'div',
+      { class: 'field' },
       h('span', { class: 'label' }, 'Length'),
       segmented(
         Object.entries(LENGTHS).map(([id, l]) => ({ id, label: l.label })),
@@ -254,6 +270,7 @@ async function generate() {
   text = {
     title: '',
     level: prefs.level,
+    form: FORMS[prefs.form] ? prefs.form : 'prose',
     targets: targets.map((t) => ({ id: t.entry.id, hard: t.hard, kind: t.kind })),
     sentences: [],
     hard: {}, // word id -> its progress before it was flagged in this text
@@ -279,6 +296,7 @@ async function generate() {
         level: prefs.level,
         length,
         topic: prefs.topic,
+        form: prefs.form,
         targets,
         recentTitles: recentTitles(),
       }),

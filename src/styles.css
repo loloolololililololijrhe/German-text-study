@@ -493,6 +493,25 @@ a {
   margin: 0.9em 0 0;
 }
 
+/* A play: the speaker's name before each line, and stage directions set apart. */
+.who {
+  margin-right: 0.35em;
+  color: var(--accent);
+  font: 700 0.62em/1 var(--sans);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.text-body p.line {
+  margin-top: 0.55em;
+}
+
+.text-body p.stage {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .w {
   padding: 0.08em 0.1em;
   margin: 0 -0.1em;

@@ -11,6 +11,7 @@ export const DEFAULT_PREFS = {
   level: 'A2',
   length: 'medium',
   topic: 'fit',
+  form: 'prose',
   model: 'claude-opus-5-5',
   autoHard: true,
   hardStep: DEFAULT_HARD_STEP,
@@ -82,6 +83,11 @@ export function sanitizeState(raw) {
   }
   if (isObj(raw.prefs)) {
     base.prefs = { ...DEFAULT_PREFS, ...raw.prefs, u: Number(raw.prefs.u) || 0 };
+    // "Dialogue" used to be a topic; it is now the form "Play", with any topic.
+    if (base.prefs.topic === 'dialogue') {
+      base.prefs.topic = DEFAULT_PREFS.topic;
+      base.prefs.form = 'play';
+    }
     const off = raw.prefs.listsOff;
     base.prefs.listsOff = Array.isArray(off) ? off.filter((x) => typeof x === 'string') : [];
     // The deck and fields last used to read an Anki file.
@@ -161,7 +167,13 @@ export function packText({ id, at, title, level, hard, sentences }) {
     title: title || '',
     level: level || '',
     hard: hard || 0,
-    sentences: sentences.map((s) => ({ de: s.de, en: s.en, br: !!s.br, w: s.words.map((x) => [x.w, x.l, x.g]) })),
+    sentences: sentences.map((s) => ({
+      de: s.de,
+      en: s.en,
+      br: !!s.br,
+      ...(s.who ? { who: s.who } : {}),
+      w: s.words.map((x) => [x.w, x.l, x.g]),
+    })),
   };
 }
 
@@ -171,6 +183,7 @@ export function unpackSentences(entry) {
     de: s.de,
     en: s.en,
     br: s.br,
+    ...(s.who ? { who: s.who } : {}),
     words: s.w.map(([w, l, g]) => ({ w, l, g })),
   }));
 }
@@ -189,6 +202,7 @@ export function sanitizeHistory(raw) {
         de: s.de,
         en: text(s.en),
         br: !!s.br,
+        ...(typeof s.who === 'string' && s.who ? { who: s.who } : {}),
         w: s.w.filter((x) => Array.isArray(x) && typeof x[0] === 'string').map((x) => [x[0], text(x[1]), text(x[2])]),
       }));
     if (!sentences.length) continue;

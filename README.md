@@ -14,6 +14,8 @@ words you find hard come back more often until they stick.
 3. **Read → Generate text**. Pick a topic, a length and a level first if you like.
    With the topic **Fit the words**, Claude chooses whatever topic suits that
    text's words best.
+   With the form **Play**, the text is written as lines spoken between named
+   characters, like a script, on whichever topic you chose.
 4. Tap a word to see what it means. Tap the small `EN` after a sentence to
    translate the whole sentence. `Listen` reads the text aloud.
 5. Press **Done reading** when you finish.

@@ -87,7 +87,11 @@ export function normalizeSentence(raw) {
         .filter((w) => w && typeof w.w === 'string' && w.w.trim())
         .map((w) => ({ w: w.w.trim(), l: String(w.l ?? w.w).trim(), g: String(w.g ?? '').trim() }))
     : [];
-  return { de: raw.de.trim(), en: String(raw.en ?? '').trim(), br: !!raw.br, words };
+  const sentence = { de: raw.de.trim(), en: String(raw.en ?? '').trim(), br: !!raw.br, words };
+  // In a play, the character who speaks the sentence.
+  const who = typeof raw.who === 'string' ? raw.who.trim() : '';
+  if (who) sentence.who = who;
+  return sentence;
 }
 
 const LETTER = /[\p{L}\p{N}]/u;

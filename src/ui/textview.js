@@ -60,8 +60,14 @@ export function createTextView({ sheet, onChange = () => {} }) {
 
   function appendSentence(si) {
     const s = text.sentences[si];
-    if (!paraEl || (s.br && si > 0)) {
-      paraEl = h('p');
+    // A play: each speaker's lines form a paragraph headed by the name, and
+    // anything nobody says is a stage direction.
+    const play = text.form === 'play' || text.sentences.some((x) => x.who);
+    const who = s.who || '';
+    const changed = si > 0 && who !== (text.sentences[si - 1].who || '');
+    if (!paraEl || (s.br && si > 0) || (play && changed)) {
+      paraEl = h('p', { class: play ? (who ? 'line' : 'stage') : null });
+      if (who) paraEl.append(h('span', { class: 'who', lang: 'de' }, who), ' ');
       bodyEl.append(paraEl);
     }
     const sent = h('span', { class: 'sent', 'data-si': String(si) });

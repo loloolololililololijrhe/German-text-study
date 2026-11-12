@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SentenceStream, segmentSentence } from '../src/lib/textparse.js';
-import { LENGTHS, TEXT_SCHEMA, TOPICS, buildUserPrompt } from '../src/lib/prompt.js';
+import { FORMS, LENGTHS, TEXT_SCHEMA, TOPICS, buildUserPrompt } from '../src/lib/prompt.js';
 
 const DOC = {
   title: 'Am Bahnhof',
@@ -146,4 +146,41 @@ test('the output schema satisfies the structured-output rules', () => {
     } else if (node.type === 'array') check(node.items);
   };
   check(TEXT_SCHEMA);
+});
+
+// ---- plays -----------------------------------------------------------------------
+
+test('the form is part of the request: prose unless a play is asked for', () => {
+  const base = { level: 'A2', length: 'short', topic: 'travel', targets: [] };
+  assert.deepEqual(Object.keys(FORMS), ['prose', 'play']);
+  assert.ok(buildUserPrompt(base).includes(`Form: ${FORMS.prose.brief}`));
+  assert.ok(buildUserPrompt({ ...base, form: 'nonsense' }).includes(`Form: ${FORMS.prose.brief}`));
+  const play = buildUserPrompt({ ...base, form: 'play' });
+  assert.ok(play.includes('Form: a short play to be read aloud'));
+  assert.ok(play.includes('Topic: travelling'), 'a play still has its topic');
+  assert.ok(!TOPICS.some((t) => t.id === 'dialogue'), 'the old Dialogue topic gave way to the form');
+});
+
+test('a play keeps the speaker of each sentence; other texts carry none', () => {
+  const doc = {
+    title: 'Im Café',
+    sentences: [
+      { de: 'Im Café.', en: 'In the café.', br: true, who: '', words: [{ w: 'Café', l: 'das Café', g: 'café' }] },
+      {
+        de: 'Hallo, Tom!',
+        en: 'Hello, Tom!',
+        br: true,
+        who: ' Anna ',
+        words: [{ w: 'Hallo', l: 'hallo', g: 'hello' }],
+      },
+      { de: 'Hallo!', en: 'Hello!', br: true, who: 'Tom', words: [{ w: 'Hallo', l: 'hallo', g: 'hello' }] },
+    ],
+  };
+  const got = new SentenceStream().push(JSON.stringify(doc));
+  assert.deepEqual(
+    got.map((s) => s.who),
+    [undefined, 'Anna', 'Tom'],
+  );
+  assert.ok(!('who' in got[0]), 'a stage direction has no speaker');
+  assert.equal(TEXT_SCHEMA.properties.sentences.items.properties.who.type, 'string');
 });

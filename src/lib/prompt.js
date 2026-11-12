@@ -27,13 +27,21 @@ export const TOPICS = [
   { id: 'work', label: 'Work & school', brief: 'work, study, or school life' },
   { id: 'nature', label: 'Nature', brief: 'nature, weather, animals, or the outdoors' },
   { id: 'story', label: 'Story', brief: 'a short fictional story with a small twist at the end' },
-  {
-    id: 'dialogue',
-    label: 'Dialogue',
-    brief: 'a conversation between two people, written as dialogue with a line or two of narration',
-  },
   { id: 'news', label: 'News', brief: 'a short, friendly news-style report about an invented local event' },
 ];
+
+/** How the text is written: continuous prose, or lines spoken by characters, like a play. */
+export const FORMS = {
+  prose: {
+    label: 'Text',
+    brief: 'continuous prose, such as a story, a report or a description. Leave "who" empty in every sentence',
+  },
+  play: {
+    label: 'Play',
+    brief:
+      'a short play to be read aloud: two or three named characters talking to each other in everyday spoken German, with the target words in what they say. Put the name of the character who says a sentence in "who", never in "de", and start a new paragraph whenever the speaker changes. There is no narrator; where the scene cannot be understood without one, a single short stage direction with "who" empty is allowed',
+  },
+};
 
 const SURPRISES = [
   'a small misunderstanding that gets resolved',
@@ -57,6 +65,7 @@ The app chooses a set of target words the learner needs to practise. Write a nat
 Annotation rules, which the app relies on to make words tappable:
 - "de" is the sentence exactly as it should be displayed. "en" is a natural English translation of that sentence.
 - "br" is true when the sentence starts a new paragraph. In dialogue, each change of speaker starts a new paragraph.
+- "who" is the name of the character who speaks the sentence when the text is a play, and an empty string otherwise. The app shows the name in front of the line itself.
 - "words" lists every word of the sentence in order, leaving out punctuation. Each "w" must be spelled exactly as it appears in "de".
 - "l" is the dictionary form: nouns in the nominative singular with their article ("der Bahnhof"), verbs in the infinitive, adjectives uninflected. For a separable verb, give the joined infinitive for both parts ("steht" and "auf" in "Er steht früh auf" both get "aufstehen"). For contractions give the preposition ("zum" gets "zu"). Names of people and places stay as they are.
 - "g" is a short English gloss of the word as it is used in this sentence, one to three words. For a part that has no meaning alone, such as a separable prefix or a reflexive pronoun, give the meaning of the whole verb. For a name of a person, write exactly "(name)", so the app does not treat it as vocabulary.`;
@@ -73,6 +82,7 @@ export const TEXT_SCHEMA = {
           de: { type: 'string' },
           en: { type: 'string' },
           br: { type: 'boolean' },
+          who: { type: 'string' },
           words: {
             type: 'array',
             items: {
@@ -87,7 +97,7 @@ export const TEXT_SCHEMA = {
             },
           },
         },
-        required: ['de', 'en', 'br', 'words'],
+        required: ['de', 'en', 'br', 'who', 'words'],
         additionalProperties: false,
       },
     },
@@ -101,11 +111,12 @@ export const TEXT_SCHEMA = {
  * @param {string} o.level       key of LEVELS
  * @param {string} o.length      key of LENGTHS
  * @param {string} o.topic       id of TOPICS, or free text typed by the learner
+ * @param {string} [o.form]      key of FORMS
  * @param {{entry:{de:string,en:string}, hard:boolean}[]} o.targets
  * @param {string[]} [o.recentTitles]
  * @param {() => number} [o.rng]
  */
-export function buildUserPrompt({ level, length, topic, targets, recentTitles = [], rng = Math.random }) {
+export function buildUserPrompt({ level, length, topic, form, targets, recentTitles = [], rng = Math.random }) {
   const preset = TOPICS.find((t) => t.id === topic);
   let brief;
   if (preset && preset.id !== 'surprise') brief = preset.brief;
@@ -116,6 +127,7 @@ export function buildUserPrompt({ level, length, topic, targets, recentTitles = 
     `Level: ${LEVELS[level] || LEVELS.A2}`,
     `Length: ${(LENGTHS[length] || LENGTHS.medium).words} words`,
     `Topic: ${brief}`,
+    `Form: ${(FORMS[form] || FORMS.prose).brief}`,
     '',
     'Target words:',
     ...targets.map((t) => `- ${t.entry.de} (${t.entry.en})${t.hard ? ' [hard]' : ''}`),

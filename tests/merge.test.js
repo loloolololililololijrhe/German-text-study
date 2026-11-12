@@ -233,3 +233,23 @@ test('sanitizeHistory survives missing, partial and hostile input', () => {
   assert.equal(odd.title, '');
   assert.deepEqual(odd.sentences, [{ de: 'Hallo.', en: '', br: false, w: [['Hallo', '', '']] }]);
 });
+
+test('a stored play keeps its speakers', () => {
+  const sentences = [
+    { de: 'Im Café.', en: 'In the café.', br: true, words: [{ w: 'Café', l: 'das Café', g: 'café' }] },
+    { de: 'Hallo!', en: 'Hello!', br: true, who: 'Anna', words: [{ w: 'Hallo', l: 'hallo', g: 'hello' }] },
+  ];
+  const packed = packText({ id: 'p', at: 9, title: 'Im Café', level: 'A2', hard: 0, sentences });
+  assert.ok(!('who' in packed.sentences[0]));
+  assert.equal(packed.sentences[1].who, 'Anna');
+  assert.deepEqual(unpackSentences(sanitizeHistory({ texts: [packed] }).texts[0]), sentences);
+});
+
+test('the old Dialogue topic becomes the Play form', () => {
+  const prefs = sanitizeState({ prefs: { topic: 'dialogue', level: 'B1' } }).prefs;
+  assert.equal(prefs.form, 'play');
+  assert.equal(prefs.topic, DEFAULT_PREFS.topic);
+  assert.equal(prefs.level, 'B1');
+  assert.equal(emptyState().prefs.form, 'prose');
+  assert.equal(sanitizeState({ prefs: { topic: 'travel' } }).prefs.form, 'prose');
+});
