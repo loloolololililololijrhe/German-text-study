@@ -7,10 +7,12 @@ export const LEVELS = {
   B2: 'B2 (upper intermediate): natural, varied prose, including passive and Konjunktiv II where they fit.',
 };
 
+// `targets` is how many study words a text must contain; `extras` is how many
+// more review words are offered to the writer as welcome but not required.
 export const LENGTHS = {
-  short: { label: 'Short', words: '60 to 80', targets: 8 },
-  medium: { label: 'Medium', words: '120 to 150', targets: 12 },
-  long: { label: 'Long', words: '220 to 260', targets: 18 },
+  short: { label: 'Short', words: '70 to 90', targets: 10, extras: 12 },
+  medium: { label: 'Medium', words: '130 to 160', targets: 18, extras: 20 },
+  long: { label: 'Long', words: '240 to 300', targets: 30, extras: 30 },
 };
 
 export const TOPICS = [
@@ -113,10 +115,20 @@ export const TEXT_SCHEMA = {
  * @param {string} o.topic       id of TOPICS, or free text typed by the learner
  * @param {string} [o.form]      key of FORMS
  * @param {{entry:{de:string,en:string}, hard:boolean}[]} o.targets
+ * @param {{de:string,en:string}[]} [o.extras]  further review words, welcome but not required
  * @param {string[]} [o.recentTitles]
  * @param {() => number} [o.rng]
  */
-export function buildUserPrompt({ level, length, topic, form, targets, recentTitles = [], rng = Math.random }) {
+export function buildUserPrompt({
+  level,
+  length,
+  topic,
+  form,
+  targets,
+  extras = [],
+  recentTitles = [],
+  rng = Math.random,
+}) {
   const preset = TOPICS.find((t) => t.id === topic);
   let brief;
   if (preset && preset.id !== 'surprise') brief = preset.brief;
@@ -132,6 +144,13 @@ export function buildUserPrompt({ level, length, topic, form, targets, recentTit
     'Target words:',
     ...targets.map((t) => `- ${t.entry.de} (${t.entry.en})${t.hard ? ' [hard]' : ''}`),
   ];
+  if (extras.length) {
+    lines.push(
+      '',
+      'More words the learner is reviewing. None of these is required, but work in as many as fit naturally:',
+      ...extras.map((e) => `- ${e.de} (${e.en})`),
+    );
+  }
   if (recentTitles.length) {
     lines.push('', 'The learner has recently read texts with these titles. Write something different:');
     lines.push(...recentTitles.map((t) => `- ${t}`));

@@ -184,3 +184,31 @@ test('a play keeps the speaker of each sentence; other texts carry none', () => 
   assert.ok(!('who' in got[0]), 'a stage direction has no speaker');
   assert.equal(TEXT_SCHEMA.properties.sentences.items.properties.who.type, 'string');
 });
+
+test('texts carry 10, 18 or 30 study words, and optional review words follow the targets', () => {
+  assert.deepEqual(
+    Object.values(LENGTHS).map((l) => l.targets),
+    [10, 18, 30],
+  );
+  const targets = [{ entry: { de: 'gehen', en: 'to go' }, hard: false }];
+  const extras = [
+    { de: 'der Zug', en: 'train' },
+    { de: 'kaufen', en: 'to buy' },
+  ];
+  const prompt = buildUserPrompt({
+    level: 'A2',
+    length: 'long',
+    topic: 'travel',
+    targets,
+    extras,
+    recentTitles: ['Im Park'],
+  });
+  assert.ok(prompt.includes(`Length: ${LENGTHS.long.words} words`));
+  const [required, optional] = prompt.split('None of these is required');
+  assert.ok(required.includes('- gehen (to go)') && !required.includes('der Zug'));
+  assert.ok(optional.includes('- der Zug (train)') && optional.includes('- kaufen (to buy)'));
+  assert.ok(optional.indexOf('- kaufen') < optional.indexOf('- Im Park'), 'before the recent titles');
+  assert.ok(
+    !buildUserPrompt({ level: 'A2', length: 'long', topic: 'travel', targets }).includes('None of these is required'),
+  );
+});

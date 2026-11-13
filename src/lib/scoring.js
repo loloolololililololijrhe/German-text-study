@@ -49,10 +49,14 @@ export const DEFAULT_MAX_HARD = 4;
 export const MAX_HARD_CHOICES = [1, 2, 3, 4, 5, 6];
 
 /** Share of a text's target words that hard words may take. */
-export const HARD_SHARE = 0.6;
+export const HARD_SHARE = 0.4;
 
-/** Share of a text's target words kept for new words, within the daily limit. */
-export const NEW_SHARE = 0.25;
+/**
+ * Share of a text's target words kept for new words, within the daily limit.
+ * New and hard words are the ones the learner does not know yet, so together
+ * they stay a minority: the rest of a text's targets are words due for review.
+ */
+export const NEW_SHARE = 1 / 6;
 
 /** "Mark as known" gives a word at least this much stability (days). */
 const KNOWN_STABILITY = 60;
@@ -279,9 +283,9 @@ export function wordPools(entries, progress, now) {
 /**
  * Choose the words the next text is written around.
  *
- * 1. About a quarter of the places are kept for new words, in deck order, as
+ * 1. About a sixth of the places are kept for new words, in deck order, as
  *    long as today's allowance of new words (`newLeft`) lasts.
- * 2. Hard words take up to 60% of the places.
+ * 2. Hard words take up to 40% of the places.
  * 3. Words that are due take what is left, the most forgotten first.
  * 4. Places still free go to more new words within the allowance, then to
  *    early practice of the words due soonest.
@@ -326,4 +330,19 @@ export function pickTargets(
   if (room() > 0) take('new', pools.spareFresh.slice(0, room()));
   if (room() > 0) take('early', pools.spareEarly.slice(0, room()));
   return picked;
+}
+
+/**
+ * Further review words for the writer to work in where they fit: the due
+ * words that did not get a place among the targets, most forgotten first,
+ * then the words due soonest. Every one that ends up in the text is reviewed
+ * when the text is finished, so the more the better.
+ */
+export function pickExtras(entries, progress, targets, count, { now = Date.now() } = {}) {
+  const taken = new Set(targets.map((t) => t.entry.id));
+  const pools = wordPools(entries, progress, now);
+  return [...pools.due, ...pools.early]
+    .map((x) => x.e)
+    .filter((e) => !taken.has(e.id))
+    .slice(0, count);
 }

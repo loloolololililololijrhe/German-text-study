@@ -2,7 +2,7 @@
 
 import { store } from '../store.js';
 import { fill, h, icon, plural, toast } from './dom.js';
-import { cleanRead, hardRead, isDue, pickTargets, rulesOf, seen } from '../lib/scoring.js';
+import { cleanRead, hardRead, isDue, pickExtras, pickTargets, rulesOf, seen } from '../lib/scoring.js';
 import { hasMemory } from '../lib/srs.js';
 import { SentenceStream } from '../lib/textparse.js';
 import { createTextView } from './textview.js';
@@ -247,8 +247,9 @@ function infoLine() {
 
 function renderSummary() {
   const parts = [];
-  if (summary.credit) parts.push(`${plural(summary.up, 'word')} reviewed`);
-  else parts.push('Text skipped, nothing counted as read');
+  if (summary.credit) {
+    parts.push(`${plural(summary.up, 'word')} reviewed${summary.due ? `, ${summary.due} of them due` : ''}`);
+  } else parts.push('Text skipped, nothing counted as read');
   if (summary.hard) parts.push(`${plural(summary.hard, 'word')} marked hard`);
   if (summary.started) parts.push(`${plural(summary.started, 'new word')} started`);
   return h('p', { class: 'notice is-good', role: 'status' }, icon('check', 18), parts.join(' · '));
@@ -260,10 +261,11 @@ async function generate() {
   if (abort) return;
   const prefs = store.state.prefs;
   const length = LENGTHS[prefs.length] ? prefs.length : 'medium';
-  const targets = pickTargets(store.index.list, store.state.progress, LENGTHS[length].targets, {
-    now: Date.now(),
-    newLeft: store.newLeft(),
-  });
+  const now = Date.now();
+  const { list } = store.index;
+  const targets = pickTargets(list, store.state.progress, LENGTHS[length].targets, { now, newLeft: store.newLeft() });
+  // More due words for Claude to work in where they fit; each one that makes it is a review.
+  const extras = pickExtras(list, store.state.progress, targets, LENGTHS[length].extras, { now });
 
   summary = null;
   error = '';
@@ -298,6 +300,7 @@ async function generate() {
         topic: prefs.topic,
         form: prefs.form,
         targets,
+        extras,
         recentTitles: recentTitles(),
       }),
       signal: abort.signal,
@@ -431,6 +434,7 @@ function finish(credit) {
   const rules = rulesOf(store.state.prefs);
   const updates = {};
   let up = 0;
+  let due = 0;
   for (const id of present) {
     const p = store.progressOf(id);
     if (id in text.hard) updates[id] = seen(p, now);
@@ -438,6 +442,7 @@ function finish(credit) {
     else if (credit) {
       updates[id] = cleanRead(p, now, rules);
       up++;
+      if (isDue(p, now)) due++;
     }
   }
 
@@ -447,7 +452,7 @@ function finish(credit) {
   ).length;
   store.addIntroduced(started);
 
-  summary = { credit, up, hard: Object.keys(text.hard).length, started };
+  summary = { credit, up, due, hard: Object.keys(text.hard).length, started };
   // A text that was read is kept for the History tab.
   if (credit) store.addText({ title: text.title, level: text.level, sentences: text.sentences, hard: summary.hard });
   rememberTitle(text.title);

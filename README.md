@@ -87,16 +87,22 @@ fallen to your target (88% unless you change it).
 Finishing a text reviews every word in it at once, so the common words soon
 have long intervals and stop taking up places.
 
-Each new text is written around a handful of target words (8, 12 or 18,
-depending on length), chosen in this order:
+Each new text must contain a set of your study words (10, 18 or 30, depending
+on length), chosen in this order:
 
-1. About a quarter of the places are kept for new words from your deck, in deck
+1. About a sixth of the places are kept for new words from your deck, in deck
    order, until the day's allowance (15) is used up.
-2. Hard words take up to 60% of the places.
+2. Hard words take up to 40% of the places.
 3. Due words take the rest, the ones you are most likely to have forgotten
    first.
 4. Free places go to more new words within the allowance, then to early
    practice of the words due soonest.
+
+On top of those, Claude is given more of your due words (12, 20 or 30) and
+asked to work in as many as fit naturally. None of them is required, so the
+text stays readable, but every one that makes it in is reviewed like any other
+word. A long text can therefore clear several dozen due words in one read, and
+the summary after "Done reading" says how many it cleared.
 
 The built-in common words are only chosen when your deck has nothing left to
 offer, though a word you marked hard always comes back. They are still

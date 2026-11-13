@@ -393,7 +393,7 @@ function drawRules() {
     h(
       'li',
       null,
-      `Each text is built from: new words from your deck, in deck order (about a quarter of the places, up to ${newPerDayOf(prefs)} a day); hard words (up to ${Math.round(HARD_SHARE * 100)}% of the places); then the due words you are most likely to have forgotten.`,
+      `A text must contain 10, 18 or 30 of your words, depending on its length: new words from your deck, in deck order (about a sixth of them, up to ${newPerDayOf(prefs)} a day); hard words (up to ${Math.round(HARD_SHARE * 100)}%); and for the rest, the due words you are most likely to have forgotten. Claude is also given more of your due words to work in wherever they fit.`,
     ),
     h(
       'li',

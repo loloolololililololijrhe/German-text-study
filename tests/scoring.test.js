@@ -21,6 +21,7 @@ import {
   markHard,
   markKnown,
   maxHardOf,
+  pickExtras,
   pickTargets,
   resetWord,
   rulesOf,
@@ -258,17 +259,18 @@ test('on the first day a text is made of new deck words, in deck order', () => {
   assert.ok(picked.every((p) => p.kind === 'new' && !p.hard));
 });
 
-test('with a backlog: a quarter new, up to 60% hard, the rest due', () => {
-  assert.equal(HARD_SHARE, 0.6);
-  assert.equal(NEW_SHARE, 0.25);
+test('with a backlog: about a sixth new, up to 40% hard, and due words take the rest', () => {
+  assert.equal(HARD_SHARE, 0.4);
+  assert.equal(NEW_SHARE, 1 / 6);
   const list = wordList(400, 500);
   const progress = {};
   for (let i = 0; i < 20; i++) progress[`d${i}`] = markHard(undefined, NOW - DAY);
   for (let i = 20; i < 150; i++) progress[`d${i}`] = scheduled(10, 15, -5);
+  // The three text lengths: 10, 18 and 30 study words.
   for (const [count, want] of [
-    [12, { hard: 7, due: 2, new: 3, early: 0 }],
-    [8, { hard: 5, due: 1, new: 2, early: 0 }],
-    [18, { hard: 11, due: 2, new: 5, early: 0 }],
+    [10, { hard: 4, due: 4, new: 2, early: 0 }],
+    [18, { hard: 7, due: 8, new: 3, early: 0 }],
+    [30, { hard: 12, due: 13, new: 5, early: 0 }],
   ]) {
     const picked = pickTargets(list, progress, count, { now: NOW, newLeft: 15, rng: rng(3) });
     assert.deepEqual(kinds(picked), want, `${count} places`);
@@ -278,7 +280,43 @@ test('with a backlog: a quarter new, up to 60% hard, the rest due', () => {
       Array.from({ length: want.new }, (_, i) => `d${150 + i}`),
       'next in the deck',
     );
+    // Due words, which the learner mostly knows, outnumber the new ones at least two to one.
+    assert.ok(want.due >= want.new * 2);
   }
+});
+
+test('with few hard words, the due words take their places too', () => {
+  const list = wordList(400);
+  const progress = { d0: markHard(undefined, NOW - DAY) };
+  for (let i = 20; i < 150; i++) progress[`d${i}`] = scheduled(10, 15, -5);
+  assert.deepEqual(kinds(pickTargets(list, progress, 30, { now: NOW, newLeft: 15, rng: rng(2) })), {
+    hard: 1,
+    due: 24,
+    new: 5,
+    early: 0,
+  });
+});
+
+test('further due words are offered as extras, without repeating the targets', () => {
+  const list = wordList(400, 300);
+  const progress = {};
+  for (let i = 0; i < 60; i++) progress[`d${i}`] = scheduled(10, 15 + i, -5); // d59 is the most forgotten
+  for (let i = 60; i < 80; i++) progress[`d${i}`] = scheduled(10, 1, i); // not due yet: d60 is due soonest
+  for (let i = 0; i < 50; i++) progress[`b${i}`] = scheduled(3, 10, -6); // built-in words are never offered
+  const targets = pickTargets(list, progress, 18, { now: NOW, newLeft: 15 });
+  const extras = pickExtras(list, progress, targets, 20, { now: NOW });
+  const targetIds = new Set(ids(targets));
+  assert.equal(extras.length, 20);
+  assert.ok(extras.every((e) => e.priority && !targetIds.has(e.id)));
+  assert.ok(
+    extras.every((e) => progress[e.id].due <= NOW),
+    'due words come before words not yet due',
+  );
+  assert.equal(extras[0].id, `d${59 - ids(targets, 'due').length}`, 'continuing where the targets stopped');
+  // When the due words run out, the ones due soonest follow.
+  const many = pickExtras(list, progress, targets, 60, { now: NOW });
+  assert.equal(many.filter((e) => progress[e.id].due > NOW)[0].id, 'd60');
+  assert.deepEqual(pickExtras(list, {}, [], 20, { now: NOW }), [], 'nothing to offer before anything is learned');
 });
 
 test("new words stop when the day's allowance is used up", () => {
