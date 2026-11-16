@@ -48,6 +48,35 @@ export const DEFAULT_HARD_STEP = 2;
 export const DEFAULT_MAX_HARD = 4;
 export const MAX_HARD_CHOICES = [1, 2, 3, 4, 5, 6];
 
+/**
+ * Ready-made pairs of the two settings above. The fewer clean reads a hard
+ * word needs, and the less a repeated lookup adds, the sooner the pile of
+ * hard words empties.
+ */
+export const HARD_PRESETS = [
+  {
+    id: 'thorough',
+    label: 'Thorough',
+    hardStep: 2,
+    maxHard: 4,
+    note: 'A hard word needs 2 clean reads, and up to 4 if you look it up again. Hard words are repeated the most, and the pile of them empties slowly.',
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    hardStep: 1,
+    maxHard: 2,
+    note: 'A hard word needs 1 clean read, or 2 if you look it up again.',
+  },
+  {
+    id: 'quick',
+    label: 'Quick',
+    hardStep: 1,
+    maxHard: 1,
+    note: 'A hard word needs 1 clean read, however often you look it up. The pile of hard words empties fastest; a word that did not stick comes back through the normal schedule.',
+  },
+];
+
 /** Share of a text's target words that hard words may take. */
 export const HARD_SHARE = 0.4;
 
@@ -80,6 +109,13 @@ export function hardStepOf(prefs) {
 /** The steps offered in Settings: 1 up to the limit on hardness. */
 export function hardStepChoices(prefs) {
   return MAX_HARD_CHOICES.filter((n) => n <= maxHardOf(prefs));
+}
+
+/** The id of the preset the learner's two hardness settings match, or '' when they were set by hand. */
+export function hardPresetOf(prefs) {
+  const step = hardStepOf(prefs);
+  const max = maxHardOf(prefs);
+  return HARD_PRESETS.find((p) => p.hardStep === step && p.maxHard === max)?.id || '';
 }
 
 /** The settings the functions below need, taken from the learner's preferences. */

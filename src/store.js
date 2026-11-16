@@ -11,6 +11,7 @@ import {
   sanitizeState,
   stableStringify,
 } from './lib/merge.js';
+import { goalStatus, markRead } from './lib/goal.js';
 import { capHardness, maxHardOf } from './lib/scoring.js';
 import { dayKey, newPerDayOf } from './lib/srs.js';
 import { GIST_FILE, TEXTS_FILE, createGist, findGist, readGist, writeGist } from './gist.js';
@@ -186,6 +187,18 @@ export const store = {
     const today = dayKey(Date.now());
     const { day, n } = this.state.intro;
     this.state.intro = { day: today, n: (day === today ? n : 0) + count };
+    persist();
+    this.syncSoon();
+  },
+
+  /** Today's texts against the daily goal: { goal, done, left, met }. */
+  goal() {
+    return goalStatus(this.state.read, this.state.prefs, Date.now());
+  },
+
+  /** Record that a text was read to the end just now. */
+  addRead() {
+    this.state.read = markRead(this.state.read, Date.now());
     persist();
     this.syncSoon();
   },

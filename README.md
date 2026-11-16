@@ -112,6 +112,14 @@ rescheduled whenever they appear in a text.
 
 - **New words a day** and **Bring a word back when the chance of knowing it
   is** are Anki's "new cards/day" and "desired retention".
+- **Daily goal** is how many texts you want to finish each day. With a goal
+  set, the Read tab shows today's count and a progress bar. A text counts when
+  you press "Done reading", and texts read on your other devices count too.
+- **Hard words** offers three presets for the two options that follow:
+  **Thorough** (2 clean reads, up to 4), **Balanced** (1, up to 2) and
+  **Quick** (1, never more). The quicker the preset, the sooner the pile of
+  hard words empties; a word that did not stick comes back through the normal
+  schedule.
 - **A hard word is back on the schedule after** sets how many clean reads a
   hard word needs (Anki's relearning steps), and **The hardest a word can get**
   limits how far repeated marking can push that.

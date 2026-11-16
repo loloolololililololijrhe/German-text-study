@@ -4,6 +4,7 @@
 // changed. Merging keeps the newer copy of every entry, so two devices that
 // were both used offline lose nothing when they next sync.
 
+import { emptyRead, mergeReads, sanitizeRead } from './goal.js';
 import { DEFAULT_HARD_STEP, DEFAULT_MAX_HARD, upgradeProgress } from './scoring.js';
 import { DEFAULT_NEW_PER_DAY, DEFAULT_RETENTION } from './srs.js';
 
@@ -19,6 +20,8 @@ export const DEFAULT_PREFS = {
   underlineHard: true,
   retention: DEFAULT_RETENTION,
   newPerDay: DEFAULT_NEW_PER_DAY,
+  // The daily goal in texts; 0 means none.
+  textsPerDay: 0,
   // Names of the word lists the learner has turned off.
   listsOff: [],
   // Set after the first import from an Anki file: see sanitizeState.
@@ -36,6 +39,8 @@ export function emptyState() {
     clearedAt: 0,
     // How many new words were started on the most recent day of reading.
     intro: { day: '', n: 0 },
+    // The texts finished on the most recent day of reading, for the daily goal.
+    read: emptyRead(),
     prefs: { ...DEFAULT_PREFS },
   };
 }
@@ -81,8 +86,10 @@ export function sanitizeState(raw) {
   if (isObj(raw.intro) && typeof raw.intro.day === 'string') {
     base.intro = { day: raw.intro.day, n: Math.max(0, Number(raw.intro.n) || 0) };
   }
+  base.read = sanitizeRead(raw.read);
   if (isObj(raw.prefs)) {
     base.prefs = { ...DEFAULT_PREFS, ...raw.prefs, u: Number(raw.prefs.u) || 0 };
+    base.prefs.textsPerDay = Math.max(0, Math.round(Number(raw.prefs.textsPerDay)) || 0);
     // "Dialogue" used to be a topic; it is now the form "Play", with any topic.
     if (base.prefs.topic === 'dialogue') {
       base.prefs.topic = DEFAULT_PREFS.topic;
@@ -132,6 +139,7 @@ export function mergeStates(a, b) {
   // the larger count is the safer one (it can only hold new words back).
   const [ia, ib] = [a.intro || out.intro, b.intro || out.intro];
   out.intro = ia.day === ib.day ? { day: ia.day, n: Math.max(ia.n, ib.n) } : ia.day > ib.day ? { ...ia } : { ...ib };
+  out.read = mergeReads(a.read, b.read);
   return out;
 }
 

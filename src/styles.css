@@ -438,6 +438,46 @@ a {
   font-size: 0.9375rem;
 }
 
+.goal {
+  margin-top: 12px;
+}
+
+.goal-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal.is-met .goal-text {
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.goal-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.goal-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goal-bar span {
+    transition: none;
+  }
+}
+
 .gen .btn-big {
   margin-top: 28px;
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_HARD_STEP,
   DEFAULT_MAX_HARD,
+  HARD_PRESETS,
   HARD_SHARE,
   MAX_HARD_CHOICES,
   MIN_SCORE,
@@ -12,6 +13,7 @@ import {
   cleanRead,
   clearHard,
   fromAnki,
+  hardPresetOf,
   hardRead,
   hardStepChoices,
   hardStepOf,
@@ -437,4 +439,43 @@ test('a list smaller than the text gives what there is', () => {
   const picked = pickTargets(wordList(4), { d0: markHard(undefined, NOW) }, 12, { now: NOW, newLeft: 15, rng: rng(1) });
   assert.equal(picked.length, 4);
   assert.equal(new Set(ids(picked)).size, 4);
+});
+
+// ---- presets ---------------------------------------------------------------------
+
+test('each preset is a valid pair of the two hardness settings, and the first is the default', () => {
+  assert.deepEqual(
+    HARD_PRESETS.map((p) => [p.id, p.hardStep, p.maxHard]),
+    [
+      ['thorough', 2, 4],
+      ['balanced', 1, 2],
+      ['quick', 1, 1],
+    ],
+  );
+  for (const p of HARD_PRESETS) {
+    assert.ok(MAX_HARD_CHOICES.includes(p.maxHard) && p.hardStep <= p.maxHard && p.label && p.note);
+    assert.equal(hardPresetOf({ hardStep: p.hardStep, maxHard: p.maxHard }), p.id);
+  }
+  assert.equal(hardPresetOf({}), 'thorough', 'the default settings are the Thorough preset');
+  assert.equal(hardPresetOf({ hardStep: DEFAULT_HARD_STEP, maxHard: DEFAULT_MAX_HARD }), 'thorough');
+  assert.equal(hardPresetOf({ hardStep: 3, maxHard: 5 }), '', 'settings chosen by hand match no preset');
+  assert.equal(hardPresetOf({ hardStep: 2, maxHard: 1 }), 'quick', 'a step above the limit counts as the limit');
+});
+
+test('with the Quick preset one clean read clears a hard word, however often it was looked up', () => {
+  const quick = HARD_PRESETS.find((p) => p.id === 'quick');
+  const rules = rulesOf({ hardStep: quick.hardStep, maxHard: quick.maxHard });
+  let p = markHard(null, NOW, rules);
+  p = markHard(p, NOW + 1, rules);
+  p = markHard(p, NOW + 2, rules);
+  assert.equal(p.s, -1);
+  p = cleanRead(p, NOW + 3, rules);
+  assert.equal(p.s, 0);
+  assert.ok(p.due > NOW + 3, 'back on the schedule');
+
+  const thorough = rulesOf({});
+  let q = markHard(markHard(null, NOW, thorough), NOW + 1, thorough);
+  assert.equal(q.s, -4);
+  q = cleanRead(q, NOW + 2, thorough);
+  assert.equal(q.s, -3, 'the default still needs more clean reads');
 });

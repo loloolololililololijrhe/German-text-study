@@ -1,7 +1,7 @@
 // The Read tab: choose a text, read it, tap words, finish.
 
 import { store } from '../store.js';
-import { fill, h, icon, plural, toast } from './dom.js';
+import { fill, h, icon, plural, segmented as segmentedRow, toast } from './dom.js';
 import { cleanRead, hardRead, isDue, pickExtras, pickTargets, rulesOf, seen } from '../lib/scoring.js';
 import { hasMemory } from '../lib/srs.js';
 import { SentenceStream } from '../lib/textparse.js';
@@ -143,6 +143,7 @@ function renderGenerator() {
     summary && renderSummary(),
     h('h1', { class: 'page-title' }, 'Your next text'),
     h('p', { class: 'gen-info' }, infoLine()),
+    goalLine(),
     h('div', { class: 'field' }, h('span', { class: 'label' }, 'Topic'), chips, topicInput),
     h(
       'div',
@@ -205,25 +206,13 @@ function renderGenerator() {
   );
 }
 
+/** A choice among a few options; the form is redrawn to show the new one. */
 function segmented(options, current, onPick, label) {
-  return h(
-    'div',
-    { class: 'segmented', role: 'group', 'aria-label': label },
-    options.map((o) =>
-      h(
-        'button',
-        {
-          type: 'button',
-          'aria-pressed': String(o.id === current),
-          onclick: () => {
-            onPick(o.id);
-            render();
-          },
-        },
-        o.label,
-      ),
-    ),
-  );
+  const pick = (id) => {
+    onPick(id);
+    render();
+  };
+  return segmentedRow(options, current, pick, label);
 }
 
 function infoLine() {
@@ -245,6 +234,33 @@ function infoLine() {
   ].join(' · ');
 }
 
+/** Today's texts against the daily goal, when the learner has set one. */
+function goalLine() {
+  const { goal, done, left, met } = store.goal();
+  if (!goal) return null;
+  const of = `${done} of ${goal} ${goal === 1 ? 'text' : 'texts'} today`;
+  let words = `${of} · ${left} to go`;
+  if (done > goal) words = `Daily goal reached: ${plural(done, 'text')} today, ${done - goal} more than your goal`;
+  else if (met) words = `Daily goal reached: ${of}`;
+  return h(
+    'div',
+    { class: `goal${met ? ' is-met' : ''}` },
+    h('p', { class: 'goal-text' }, met && icon('check', 16), words),
+    h(
+      'div',
+      {
+        class: 'goal-bar',
+        role: 'progressbar',
+        'aria-label': 'Texts read today',
+        'aria-valuemin': '0',
+        'aria-valuemax': String(goal),
+        'aria-valuenow': String(Math.min(done, goal)),
+      },
+      h('span', { style: `width: ${Math.min(100, (done / goal) * 100)}%` }),
+    ),
+  );
+}
+
 function renderSummary() {
   const parts = [];
   if (summary.credit) {
@@ -252,6 +268,7 @@ function renderSummary() {
   } else parts.push('Text skipped, nothing counted as read');
   if (summary.hard) parts.push(`${plural(summary.hard, 'word')} marked hard`);
   if (summary.started) parts.push(`${plural(summary.started, 'new word')} started`);
+  if (summary.goalMet) parts.push('Daily goal reached');
   return h('p', { class: 'notice is-good', role: 'status' }, icon('check', 18), parts.join(' · '));
 }
 
@@ -453,8 +470,13 @@ function finish(credit) {
   store.addIntroduced(started);
 
   summary = { credit, up, due, hard: Object.keys(text.hard).length, started };
-  // A text that was read is kept for the History tab.
-  if (credit) store.addText({ title: text.title, level: text.level, sentences: text.sentences, hard: summary.hard });
+  if (credit) {
+    // A text that was read counts towards the daily goal and is kept for the History tab.
+    const before = store.goal();
+    store.addRead();
+    summary.goalMet = !before.met && store.goal().met;
+    store.addText({ title: text.title, level: text.level, sentences: text.sentences, hard: summary.hard });
+  }
   rememberTitle(text.title);
   text = null;
   saveText();

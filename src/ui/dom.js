@@ -27,6 +27,17 @@ export function fill(el, ...children) {
   return el;
 }
 
+/** A row of buttons of which one is pressed. Options are { id, label }; no option is pressed when `current` matches none. */
+export function segmented(options, current, onPick, label) {
+  return h(
+    'div',
+    { class: 'segmented', role: 'group', 'aria-label': label },
+    options.map((o) =>
+      h('button', { type: 'button', 'aria-pressed': String(o.id === current), onclick: () => onPick(o.id) }, o.label),
+    ),
+  );
+}
+
 const PATHS = {
   book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/>',

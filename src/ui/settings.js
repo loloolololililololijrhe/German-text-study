@@ -1,10 +1,19 @@
 // The Settings tab: API key, reading preferences, word lists, sync.
 
 import { BUILTIN_SRC, store } from '../store.js';
-import { fill, h, icon, plural, timeAgo, toast } from './dom.js';
+import { fill, h, icon, plural, segmented, timeAgo, toast } from './dom.js';
 import { MODELS } from '../lib/models.js';
 import { LEVELS } from '../lib/prompt.js';
-import { HARD_SHARE, MAX_HARD_CHOICES, hardStepChoices, hardStepOf, maxHardOf } from '../lib/scoring.js';
+import { TEXT_GOAL_CHOICES, textGoalOf } from '../lib/goal.js';
+import {
+  HARD_PRESETS,
+  HARD_SHARE,
+  MAX_HARD_CHOICES,
+  hardPresetOf,
+  hardStepChoices,
+  hardStepOf,
+  maxHardOf,
+} from '../lib/scoring.js';
 import { NEW_PER_DAY_CHOICES, RETENTION_CHOICES, newPerDayOf, retentionOf } from '../lib/srs.js';
 import { tts } from '../tts.js';
 import { pickDeckFile, updateFromAnki } from './import.js';
@@ -262,7 +271,7 @@ function drawAnki() {
 
 const reads = (n) => `${n} clean ${n === 1 ? 'read' : 'reads'}`;
 
-/** The two hardness settings. The step can never be larger than the limit. */
+/** The daily goal, the schedule's numbers, and the hardness settings with their presets. The step can never be larger than the limit. */
 function drawHardness() {
   if (!hardEl) return;
   const prefs = store.state.prefs;
@@ -283,8 +292,26 @@ function drawHardness() {
         .sort((a, b) => a - b)
         .map((n) => h('option', { value: String(n), selected: n === current }, write(n))),
     );
+  const preset = HARD_PRESETS.find((p) => p.id === hardPresetOf(prefs));
   fill(
     hardEl,
+    h(
+      'label',
+      { class: 'field' },
+      h('span', { class: 'label' }, 'Daily goal'),
+      choice(
+        TEXT_GOAL_CHOICES,
+        textGoalOf(prefs),
+        (n) => (n ? `${plural(n, 'text')} a day` : 'No goal'),
+        (n) => store.updatePrefs({ textsPerDay: n }),
+        'Daily goal in texts',
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        'With a goal, the Read tab shows how many texts you have finished today. A text counts when you press “Done reading”, whatever its length. A day starts at 4 a.m.',
+      ),
+    ),
     h(
       'label',
       { class: 'field' },
@@ -326,6 +353,28 @@ function drawHardness() {
       ),
     ),
     h(
+      'div',
+      { class: 'field' },
+      h('span', { class: 'label' }, 'Hard words'),
+      segmented(
+        HARD_PRESETS.map((p) => ({ id: p.id, label: p.label })),
+        preset?.id,
+        (id) => {
+          const p = HARD_PRESETS.find((x) => x.id === id);
+          store.updatePrefs({ hardStep: p.hardStep, maxHard: p.maxHard });
+          drawHardness();
+          drawRules();
+        },
+        'Hard words preset',
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        preset ? preset.note : 'Your own choice, set with the two options below. Pick a preset to replace it.',
+        ' Presets set the two options below. A quicker preset also eases words that are already hard; going back does not undo that.',
+      ),
+    ),
+    h(
       'label',
       { class: 'field' },
       h('span', { class: 'label' }, 'A hard word is back on the schedule after'),
@@ -334,6 +383,7 @@ function drawHardness() {
         step,
         (n) => {
           store.updatePrefs({ hardStep: n });
+          drawHardness();
           drawRules();
         },
         'Clean reads for a hard word',
@@ -388,7 +438,7 @@ function drawRules() {
     h(
       'li',
       null,
-      `Marking a word hard is Anki’s “Again”: its memory strength drops and it needs ${reads(step)} in the coming texts before it goes back on the schedule (marking it again adds more, up to ${max}).`,
+      `Marking a word hard is Anki’s “Again”: its memory strength drops and it needs ${reads(step)} in the coming texts before it goes back on the schedule (${max > step ? `marking it again adds more, up to ${max}` : 'marking it again adds no more'}).`,
     ),
     h(
       'li',
