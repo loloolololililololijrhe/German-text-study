@@ -12,9 +12,10 @@ import {
   stableStringify,
 } from './lib/merge.js';
 import { goalStatus, markRead } from './lib/goal.js';
+import { addRecord, emptyStats, mergeStats, newDeviceId, sanitizeStats, snapshotOf } from './lib/metrics.js';
 import { capHardness, maxHardOf } from './lib/scoring.js';
 import { dayKey, newPerDayOf } from './lib/srs.js';
-import { GIST_FILE, TEXTS_FILE, createGist, findGist, readGist, writeGist } from './gist.js';
+import { GIST_FILE, STATS_FILE, TEXTS_FILE, createGist, findGist, readGist, writeGist } from './gist.js';
 import common1 from './data/common-1.txt?raw';
 import common2 from './data/common-2.txt?raw';
 import common3 from './data/common-3.txt?raw';
@@ -24,6 +25,7 @@ import defaultDeck from './data/deck.json';
 const STATE_KEY = 'gts.state';
 const LOCAL_KEY = 'gts.local';
 const TEXTS_KEY = 'gts.texts';
+const STATS_KEY = 'gts.stats';
 export const BUILTIN_SRC = 'Common words';
 // deck.json is either a plain list of words or { name, words }.
 const deckWords = Array.isArray(defaultDeck) ? defaultDeck : defaultDeck.words || [];
@@ -56,6 +58,8 @@ export const store = {
   local: { apiKey: '', ghToken: '', gistId: '', voice: '', lastSync: 0, ...(read(LOCAL_KEY) || {}) },
   // Finished texts, newest first, kept for re-reading.
   history: sanitizeHistory(read(TEXTS_KEY)),
+  // The daily numbers shown on the Stats tab.
+  stats: sanitizeStats(read(STATS_KEY)),
   index: null,
   sync: { status: 'off', message: '' },
 
@@ -64,7 +68,7 @@ export const store = {
     return () => listeners.delete(fn);
   },
 
-  /** `what` tells views how much to redraw: 'progress', 'words', 'prefs', 'local', 'sync'. */
+  /** `what` tells views how much to redraw: 'progress', 'words', 'prefs', 'local', 'sync', 'history', 'stats'. */
   emit(what) {
     for (const fn of listeners) fn(what);
   },
@@ -228,6 +232,40 @@ export const store = {
     this.syncSoon();
   },
 
+  /** How many of the listed words have each status right now. */
+  snapshot() {
+    return snapshotOf(this.index.list, this.state.progress, Date.now());
+  },
+
+  /**
+   * Add one text's numbers to today's. `key` says what kind of text it was
+   * (see textKey), `counts` holds its numbers by field name.
+   */
+  addStats(key, counts) {
+    // Each device keeps its own record of a day, under a name made up once.
+    if (!this.local.device) this.setLocal({ device: newDeviceId() });
+    const now = Date.now();
+    this.stats = addRecord(this.stats, {
+      day: dayKey(now),
+      device: this.local.device,
+      key,
+      counts,
+      snapshot: this.snapshot(),
+      now,
+    });
+    write(STATS_KEY, this.stats);
+    this.emit('stats');
+    this.syncSoon();
+  },
+
+  /** Forget all the numbers, on all synced devices. */
+  clearStats() {
+    this.stats = { ...emptyStats(), clearedAt: Date.now() };
+    write(STATS_KEY, this.stats);
+    this.emit('stats');
+    this.syncSoon();
+  },
+
   customCount() {
     return Object.keys(this.state.custom).length;
   },
@@ -253,7 +291,11 @@ export const store = {
     try {
       let id = this.local.gistId || (await findGist(token));
       if (!id) {
-        id = await createGist(token, { [GIST_FILE]: this.state, [TEXTS_FILE]: this.history });
+        id = await createGist(token, {
+          [GIST_FILE]: this.state,
+          [TEXTS_FILE]: this.history,
+          [STATS_FILE]: this.stats,
+        });
         this.setLocal({ gistId: id, lastSync: Date.now() });
       } else {
         if (id !== this.local.gistId) this.setLocal({ gistId: id });
@@ -285,6 +327,20 @@ export const store = {
         const nothingYet = !files[TEXTS_FILE] && !mergedTexts.texts.length && !mergedTexts.clearedAt;
         if (!nothingYet && (!files[TEXTS_FILE] || textsText !== stableStringify(remoteTexts))) {
           changed[TEXTS_FILE] = mergedTexts;
+        }
+
+        // The daily numbers: each device's own record of each day.
+        const remoteStats = sanitizeStats(files[STATS_FILE]);
+        const mergedStats = mergeStats(this.stats, remoteStats);
+        const statsText = stableStringify(mergedStats);
+        if (statsText !== stableStringify(this.stats)) {
+          this.stats = mergedStats;
+          write(STATS_KEY, this.stats);
+          this.emit('stats');
+        }
+        const noStats = !files[STATS_FILE] && !Object.keys(mergedStats.days).length && !mergedStats.clearedAt;
+        if (!noStats && (!files[STATS_FILE] || statsText !== stableStringify(remoteStats))) {
+          changed[STATS_FILE] = mergedStats;
         }
 
         if (Object.keys(changed).length) await writeGist(token, id, changed);

@@ -15,6 +15,11 @@
   --danger: #a3261f;
   --danger-soft: #f8dcd8;
   --shadow: 0 10px 34px rgba(48, 36, 12, 0.16);
+  /* Chart series, checked to be told apart on --surface, also with colour-blindness. */
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', 'Noto Serif', Georgia, serif;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --topbar-h: 52px;
@@ -39,6 +44,10 @@
     --danger: #f08a80;
     --danger-soft: #4a2320;
     --shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+    --viz-1: #3987e5;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-4: #c98500;
   }
 }
 
@@ -1257,4 +1266,299 @@ input[type='range'] {
   margin: -8px 0 10px -12px;
   padding: 6px 12px;
   color: var(--accent);
+}
+
+/* ---- stats --------------------------------------------------------------- */
+
+#view-stats .segmented {
+  margin-top: 14px;
+}
+
+#view-stats > .notice {
+  margin-top: 16px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.kpi-l,
+.kpi-s {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.kpi-v {
+  font: 600 1.625rem/1.25 var(--sans);
+  letter-spacing: -0.01em;
+}
+
+.ratios {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ratios + .help-list,
+.ratios + .help {
+  margin-top: 16px;
+}
+
+/* A name, the figure, and a bar underneath; on a wide screen the bar sits between them. */
+.ratio {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'name figure' 'bar bar';
+  gap: 6px 12px;
+  align-items: baseline;
+}
+
+.ratio-name {
+  grid-area: name;
+  font-weight: 550;
+}
+
+.ratio-figure {
+  grid-area: figure;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ratio-bar {
+  grid-area: bar;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.ratio-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.viz {
+  margin: 0;
+}
+
+.viz + .viz {
+  margin-top: 22px;
+}
+
+.viz + .help {
+  margin-top: 10px;
+}
+
+.viz-title {
+  font-weight: 550;
+}
+
+.viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.viz-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viz-legend b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-key {
+  flex: none;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.viz-plot {
+  position: relative;
+  margin-top: 6px;
+  border-radius: 8px;
+  /* Sideways drags read the chart; up and down still scrolls the page. */
+  touch-action: pan-y;
+}
+
+.viz-plot svg {
+  display: block;
+  overflow: visible;
+}
+
+.viz-grid,
+.viz-axis,
+.viz-goal,
+.viz-cross {
+  stroke: var(--line);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.viz-axis,
+.viz-cross {
+  stroke: color-mix(in srgb, var(--muted) 55%, var(--surface));
+}
+
+.viz-goal {
+  stroke: var(--muted);
+}
+
+.viz-tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.viz-dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.viz-band {
+  fill: var(--surface-2);
+}
+
+.viz-hit {
+  fill: transparent;
+}
+
+.viz-tip {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  max-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 0.8125rem;
+  pointer-events: none;
+}
+
+.viz-tip-day {
+  margin-bottom: 4px;
+  color: var(--muted);
+}
+
+.viz-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.viz-tip-row b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-tip-row span:last-child {
+  color: var(--muted);
+}
+
+.num-scroll {
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.num-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.num-table th,
+.num-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  vertical-align: baseline;
+}
+
+.num-table thead th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: bottom;
+}
+
+.num-table th:first-child,
+.num-table .is-text {
+  text-align: left;
+}
+
+.num-table tbody th {
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.num-table tbody tr:last-child th,
+.num-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.num-table + .help,
+.num-scroll + .help {
+  margin-top: 12px;
+}
+
+.num-details summary {
+  min-height: 44px;
+  padding: 10px 0;
+  color: var(--accent);
+  font-weight: 550;
+  cursor: pointer;
+}
+
+@media (min-width: 560px) {
+  .kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ratio {
+    grid-template-columns: minmax(9rem, 13rem) 1fr minmax(13rem, auto);
+    grid-template-areas: 'name bar figure';
+    align-items: center;
+  }
 }

@@ -4,6 +4,8 @@ const API = 'https://api.github.com';
 export const GIST_FILE = 'german-text-study.json';
 /** Past texts live in a second file of the same gist, so progress syncs stay small. */
 export const TEXTS_FILE = 'german-text-study-texts.json';
+/** The daily numbers of the Stats tab, in a third file for the same reason. */
+export const STATS_FILE = 'german-text-study-stats.json';
 const DESCRIPTION = 'German Text Study progress (synced automatically by the app)';
 
 export class GistError extends Error {
@@ -69,7 +71,7 @@ export async function createGist(token, files) {
 export async function readGist(token, id) {
   const g = await gh(token, `/gists/${id}`);
   const out = {};
-  for (const name of [GIST_FILE, TEXTS_FILE]) {
+  for (const name of [GIST_FILE, TEXTS_FILE, STATS_FILE]) {
     const file = g.files?.[name];
     out[name] = null;
     if (!file) continue;

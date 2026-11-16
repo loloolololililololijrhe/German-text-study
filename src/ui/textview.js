@@ -142,6 +142,8 @@ export function createTextView({ sheet, onChange = () => {} }) {
     if (!text.tapped[id]) {
       text.tapped[id] = true;
       if (!isUnscored(word)) {
+        // For the Stats tab: a lookup of a word that is in none of the lists.
+        if (!store.index.byId.has(id)) text.out = (text.out || 0) + 1;
         if (store.state.prefs.autoHard) flag(word);
         else if (store.index.byId.has(id)) store.setProgress(id, lookedUp(store.progressOf(id), Date.now()));
       }
@@ -161,6 +163,8 @@ export function createTextView({ sheet, onChange = () => {} }) {
       store.addCustom([{ de: word.l || word.w, en: word.g || '?', src: FROM_TEXT }]);
       entry = store.index.find(word.l);
       if (!entry) return;
+      // Remember that the list only has this word because of this text.
+      (text.added ||= {})[entry.id] = true;
     }
     if (entry.id in text.hard) return;
     const before = store.progressOf(entry.id) || null;

@@ -4,6 +4,7 @@ import { store } from '../store.js';
 import { fill, h, icon, plural, segmented as segmentedRow, toast } from './dom.js';
 import { cleanRead, hardRead, isDue, pickExtras, pickTargets, rulesOf, seen } from '../lib/scoring.js';
 import { hasMemory } from '../lib/srs.js';
+import { createStopwatch, tallyWords, textKey } from '../lib/metrics.js';
 import { SentenceStream } from '../lib/textparse.js';
 import { createTextView } from './textview.js';
 import { FORMS, LENGTHS, LEVELS, TOPICS, buildUserPrompt } from '../lib/prompt.js';
@@ -22,6 +23,8 @@ let summary = null; // outcome of the text that was just finished
 let error = '';
 
 let view; // the text on screen: tapping, marking, read-aloud
+let watch = null; // time spent reading the text on screen
+let showing = false; // whether the Read tab is the one on screen
 let titleEl = null;
 let footEl = null;
 
@@ -38,6 +41,7 @@ function loadText() {
 
 function saveText() {
   try {
+    if (text && watch) text.ms = watch.ms();
     if (text) localStorage.setItem(TEXT_KEY, JSON.stringify(text));
     else localStorage.removeItem(TEXT_KEY);
   } catch {
@@ -67,6 +71,18 @@ export function mountReader(el, options) {
   sheet = options.sheet;
   openSettings = options.openSettings;
   view = createTextView({ sheet, onChange: saveText });
+  // A text left open by an earlier visit carries the reading time it had so far.
+  if (text) watch = createStopwatch({ elapsed: text.ms || 0 });
+  // Reading time counts while the text is on screen and the learner is active.
+  const alive = () => text && showing && watch?.touch();
+  window.addEventListener('scroll', alive, { passive: true });
+  document.addEventListener('pointerdown', alive);
+  document.addEventListener('keydown', alive);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resumeWatch();
+    else pauseWatch();
+  });
+  window.addEventListener('pagehide', pauseWatch);
   store.subscribe((what) => {
     if (text) {
       if (what === 'progress' || what === 'words') view.repaint();
@@ -79,12 +95,27 @@ export function mountReader(el, options) {
 
 /** Called when the Read tab becomes visible, to pick up changes made elsewhere. */
 export function showReader() {
+  showing = true;
   if (!text) render();
   else view.paintUnderline();
+  resumeWatch();
 }
 
 export function leaveReader() {
+  showing = false;
   view.stopListening();
+  pauseWatch();
+}
+
+/** Count reading time only once there is something to read and the text is on screen. */
+function resumeWatch() {
+  if (text && text.sentences.length && showing && document.visibilityState === 'visible') watch?.start();
+}
+
+function pauseWatch() {
+  if (!watch) return;
+  watch.pause();
+  saveText();
 }
 
 function render() {
@@ -290,7 +321,10 @@ async function generate() {
     title: '',
     level: prefs.level,
     form: FORMS[prefs.form] ? prefs.form : 'prose',
+    length,
     targets: targets.map((t) => ({ id: t.entry.id, hard: t.hard, kind: t.kind })),
+    extras: extras.map((e) => e.id),
+    t0: now, // when the request was sent, for the Stats tab
     sentences: [],
     hard: {}, // word id -> its progress before it was flagged in this text
     tapped: {}, // word ids looked up in this text
@@ -298,6 +332,7 @@ async function generate() {
     complete: false,
   };
   abort = new AbortController();
+  watch = createStopwatch();
   render();
   window.scrollTo(0, 0);
 
@@ -308,7 +343,7 @@ async function generate() {
     const { generateText } = await import('../claude.js').catch(() => {
       throw new Error('Could not load the text writer. Check your internet connection and try again.');
     });
-    await generateText({
+    const used = await generateText({
       apiKey: store.local.apiKey,
       model: prefs.model,
       prompt: buildUserPrompt({
@@ -332,14 +367,21 @@ async function generate() {
           text.sentences.push(s);
           view.appendSentence(text.sentences.length - 1);
         }
+        if (fresh.length && text.wait == null) {
+          // The first sentence is here: the wait is over and reading can begin.
+          text.wait = Date.now() - text.t0;
+          resumeWatch();
+        }
         if (fresh.length) saveText();
       },
     });
+    Object.assign(mine, { gen: Date.now() - mine.t0, ...used });
     if (!mine.sentences.length) throw new Error('Claude returned an empty text. Please try again.');
   } catch (err) {
     if (text !== mine) return;
     if (err.aborted || !mine.sentences.length) {
       text = null;
+      watch = null;
       error = err.aborted ? '' : err.message;
     } else {
       // Keep what arrived: a shorter text is still worth reading.
@@ -450,17 +492,22 @@ function finish(credit) {
 
   const rules = rulesOf(store.state.prefs);
   const updates = {};
+  const tally = []; // what happened to each word, for the Stats tab
   let up = 0;
   let due = 0;
   for (const id of present) {
     const p = store.progressOf(id);
-    if (id in text.hard) updates[id] = seen(p, now);
-    else if (text.tapped[id] || tappedPhrase.has(id)) updates[id] = credit ? hardRead(p, now, rules) : seen(p, now);
+    const flagged = id in text.hard;
+    const tapped = flagged || !!text.tapped[id] || tappedPhrase.has(id);
+    if (flagged) updates[id] = seen(p, now);
+    else if (tapped) updates[id] = credit ? hardRead(p, now, rules) : seen(p, now);
     else if (credit) {
       updates[id] = cleanRead(p, now, rules);
       up++;
       if (isDue(p, now)) due++;
     }
+    // A word the list only has because it was looked up in this text is counted as a lookup outside the lists.
+    if (credit && !text.added?.[id]) tally.push({ before: flagged ? text.hard[id] : p, tapped, after: updates[id] });
   }
 
   // New words that this text got going count towards today's allowance.
@@ -477,10 +524,34 @@ function finish(credit) {
     summary.goalMet = !before.met && store.goal().met;
     store.addText({ title: text.title, level: text.level, sentences: text.sentences, hard: summary.hard });
   }
+  // This text's numbers for the Stats tab: the request, and for a text that was read, the reading.
+  const counts = { inTok: text.inTok, outTok: text.outTok };
+  if (text.gen != null) {
+    Object.assign(counts, { timed: 1, waitS: (text.wait ?? text.gen) / 1000, genS: text.gen / 1000 });
+  }
+  if (credit) {
+    const extras = text.extras || [];
+    Object.assign(counts, tallyWords(tally, now), {
+      texts: 1,
+      readS: (watch ? watch.ms() : 0) / 1000,
+      words: text.sentences.reduce((n, s) => n + s.words.length, 0),
+      tapOut: text.out,
+      started,
+      marked: summary.hard,
+      targets: text.targets.length,
+      targetsUsed: text.targets.filter((t) => present.has(t.id)).length,
+      extras: extras.length,
+      extrasUsed: extras.filter((id) => present.has(id)).length,
+    });
+  } else counts.skipped = 1;
+  const key = textKey(text.level, text.length || store.state.prefs.length);
+
   rememberTitle(text.title);
   text = null;
+  watch = null;
   saveText();
   store.setProgressMany(updates);
+  store.addStats(key, counts);
   render();
   window.scrollTo(0, 0);
   store.syncNow();

@@ -65,8 +65,9 @@ site are public.
 
 **Settings → Sync between devices**: create a GitHub token with only the `gist`
 permission and paste it in on each device. Your schedule, imported words,
-preferences and past texts are stored in a private gist on your account and
-merged every time the app opens or you finish a text. The Claude API key is
+preferences, past texts and the numbers of the Stats tab are stored in a
+private gist on your account and merged every time the app opens or you finish
+a text. The Claude API key is
 never synced.
 
 ## How words come back
@@ -129,6 +130,35 @@ rescheduled whenever they appear in a text.
 The **Words** tab shows every word with its status, when it is due, and its
 memory strength.
 
+## Stats
+
+The **Stats** tab keeps count of what happens in every text you finish, so you
+can tune the settings from numbers instead of guesses. Pick Today, 7 days, 30
+days or All at the top; everything below follows.
+
+- **Tiles**: texts read, reading time, words reviewed, words looked up, new
+  words started and hard words cleared, each with the figure per text.
+- **How often you looked a word up**, by what the word was when the text
+  began: new (first sight), hard (looked up again), due, and not due yet. The
+  rate for hard words is the one that decides whether the pile of hard words
+  shrinks; the card says where the limit lies with your hard-word settings.
+  The rate for due words is your real retention, to compare with the target.
+- **Your words**: hard, learning and known words over time, and the new words
+  still to come.
+- **Day by day**: texts (with your daily goal), minutes of reading, and lookups
+  per text.
+- **By kind of text**: the same figures per level and length, including words
+  reviewed per minute.
+- **The texts Claude wrote**: how many of the required words and of the
+  optional due words made it into the text, how long you waited, and the
+  tokens used.
+- **Words you look up most**, and every day as a table, with a CSV download.
+
+Reading time counts while a text is on screen and stops after three minutes
+without a tap or scroll. The numbers start from the first text you finish after
+this tab was added; they cannot be reconstructed for earlier texts. Each device
+keeps its own record of a day, and syncing adds them up.
+
 ## Publishing
 
 The repository deploys itself to GitHub Pages. Switch it on once: repository
@@ -151,9 +181,11 @@ The code is plain JavaScript modules built with Vite.
   (`words.js`), the schedule (`srs.js`, FSRS via the `ts-fsrs` library, checked
   against Anki's own results), marking and selection (`scoring.js`), the prompt
   (`prompt.js`),
-  stream parsing (`textparse.js`), Anki import (`anki.js`) and sync merging
+  stream parsing (`textparse.js`), Anki import (`anki.js`), the daily goal
+  (`goal.js`), the numbers of the Stats tab (`metrics.js`) and sync merging
   (`merge.js`). `tests/` covers all of it.
-- `src/ui/` holds the four screens and the shared text view, `src/claude.js` the Claude API call and
-  `src/gist.js` the sync storage.
+- `src/ui/` holds the five screens, the shared text view and the charts
+  (`chart.js`), `src/claude.js` the Claude API call and `src/gist.js` the sync
+  storage.
 - `src/data/common-*.txt` is the built-in word list, one `German = English`
   per line, most frequent first.

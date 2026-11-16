@@ -14,7 +14,8 @@ export class GenerationError extends Error {
 
 /**
  * Stream one reading text. `onText` receives each piece of the JSON document as
- * it arrives. Resolves when the text is complete; rejects with GenerationError.
+ * it arrives. Resolves when the text is complete, with the tokens the request
+ * used ({ inTok, outTok }); rejects with GenerationError.
  */
 export async function generateText({ apiKey, model, prompt, onText, signal }) {
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
@@ -51,6 +52,11 @@ export async function generateText({ apiKey, model, prompt, onText, signal }) {
   if (message.stop_reason === 'max_tokens') {
     throw new GenerationError('The text was cut off before it finished. Try a shorter length.');
   }
+  const u = message.usage || {};
+  return {
+    inTok: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+    outTok: u.output_tokens || 0,
+  };
 }
 
 function explain(err) {
