@@ -12,6 +12,7 @@ import {
   stableStringify,
 } from './lib/merge.js';
 import { goalStatus, markRead } from './lib/goal.js';
+import { mergeTests } from './lib/leveltest.js';
 import { addRecord, emptyStats, mergeStats, newDeviceId, sanitizeStats, snapshotOf } from './lib/metrics.js';
 import { capHardness, maxHardOf } from './lib/scoring.js';
 import { dayKey, newPerDayOf } from './lib/srs.js';
@@ -229,6 +230,14 @@ export const store = {
     this.history = { clearedAt: Date.now(), texts: [] };
     write(TEXTS_KEY, this.history);
     this.emit('history');
+    this.syncSoon();
+  },
+
+  /** Keep the result of a level test. */
+  addTest(result) {
+    this.state.tests = mergeTests([result], this.state.tests);
+    persist();
+    this.emit('tests');
     this.syncSoon();
   },
 

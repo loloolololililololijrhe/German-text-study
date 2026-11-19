@@ -5,6 +5,7 @@
 // were both used offline lose nothing when they next sync.
 
 import { emptyRead, mergeReads, sanitizeRead } from './goal.js';
+import { mergeTests, sanitizeTests } from './leveltest.js';
 import { DEFAULT_HARD_STEP, DEFAULT_MAX_HARD, upgradeProgress } from './scoring.js';
 import { DEFAULT_NEW_PER_DAY, DEFAULT_RETENTION } from './srs.js';
 
@@ -41,6 +42,8 @@ export function emptyState() {
     intro: { day: '', n: 0 },
     // The texts finished on the most recent day of reading, for the daily goal.
     read: emptyRead(),
+    // Results of the level test, newest first.
+    tests: [],
     prefs: { ...DEFAULT_PREFS },
   };
 }
@@ -87,6 +90,7 @@ export function sanitizeState(raw) {
     base.intro = { day: raw.intro.day, n: Math.max(0, Number(raw.intro.n) || 0) };
   }
   base.read = sanitizeRead(raw.read);
+  base.tests = sanitizeTests(raw.tests);
   if (isObj(raw.prefs)) {
     base.prefs = { ...DEFAULT_PREFS, ...raw.prefs, u: Number(raw.prefs.u) || 0 };
     base.prefs.textsPerDay = Math.max(0, Math.round(Number(raw.prefs.textsPerDay)) || 0);
@@ -140,6 +144,7 @@ export function mergeStates(a, b) {
   const [ia, ib] = [a.intro || out.intro, b.intro || out.intro];
   out.intro = ia.day === ib.day ? { day: ia.day, n: Math.max(ia.n, ib.n) } : ia.day > ib.day ? { ...ia } : { ...ib };
   out.read = mergeReads(a.read, b.read);
+  out.tests = mergeTests(a.tests, b.tests);
   return out;
 }
 

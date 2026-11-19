@@ -159,6 +159,28 @@ without a tap or scroll. The numbers start from the first text you finish after
 this tab was added; they cannot be reconstructed for earlier texts. Each device
 keeps its own record of a day, and syncing adds them up.
 
+## Level test
+
+**Settings → Level test** checks your German from A1 to C2 with multiple-choice
+questions on grammar, vocabulary and reading.
+
+- **Find my level** starts at A1 with 8 questions and moves up one level at a
+  time for as long as you pass (6 of 8). A near miss (5 of 8) is forgiven if
+  you pass the level after it. The result is the highest level you passed, and
+  one tap sets the level of your texts to match.
+- **Test one level** asks 12 questions of the level you pick; 9 right is a
+  pass.
+
+Each answer is marked straight away with a short explanation, "I don't know"
+is always an option, and at the end you can look through every answer. A test
+prefers questions you have not seen yet, so a second attempt differs from the
+first. Results are kept and synced.
+
+The 120 questions (20 per level) are in `src/data/leveltest.js`. They follow
+the usual textbook progression but have not been calibrated on learners, and
+the test cannot judge listening, speaking or writing, so the result is a guide
+and not a certificate.
+
 ## Publishing
 
 The repository deploys itself to GitHub Pages. Switch it on once: repository
@@ -182,7 +204,8 @@ The code is plain JavaScript modules built with Vite.
   against Anki's own results), marking and selection (`scoring.js`), the prompt
   (`prompt.js`),
   stream parsing (`textparse.js`), Anki import (`anki.js`), the daily goal
-  (`goal.js`), the numbers of the Stats tab (`metrics.js`) and sync merging
+  (`goal.js`), the numbers of the Stats tab (`metrics.js`), the level test
+  (`leveltest.js`) and sync merging
   (`merge.js`). `tests/` covers all of it.
 - `src/ui/` holds the five screens, the shared text view and the charts
   (`chart.js`), `src/claude.js` the Claude API call and `src/gist.js` the sync

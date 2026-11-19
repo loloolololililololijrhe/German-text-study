@@ -17,6 +17,7 @@ import {
 import { NEW_PER_DAY_CHOICES, RETENTION_CHOICES, newPerDayOf, retentionOf } from '../lib/srs.js';
 import { tts } from '../tts.js';
 import { pickDeckFile, updateFromAnki } from './import.js';
+import { levelTestCard, mountTest, testRunning } from './leveltest.js';
 
 const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=gist&description=German%20Text%20Study%20sync';
 const KEY_URL = 'https://platform.claude.com/settings/keys';
@@ -28,12 +29,14 @@ let voiceEl;
 let rulesEl;
 let hardEl;
 let ankiEl;
+let levelEl;
 
 export function mountSettings(el) {
   root = el;
   render();
   store.subscribe((what) => {
     if (what === 'words') drawSources();
+    if (what === 'words' || what === 'tests') drawLevelTest();
     if (what === 'prefs') drawAnki();
     if (what === 'sync' || what === 'local') drawSync();
   });
@@ -50,7 +53,16 @@ function card(title, ...children) {
 }
 
 function render() {
+  // A level test that is under way takes over the tab until it is finished or stopped.
+  if (testRunning()) {
+    mountTest(root, () => {
+      render();
+      window.scrollTo(0, 0);
+    });
+    return;
+  }
   const prefs = store.state.prefs;
+  levelEl = h('div');
   sourcesEl = h('div');
   syncEl = h('div');
   voiceEl = h('div');
@@ -193,6 +205,8 @@ function render() {
         : h('p', { class: 'help' }, 'This browser has no speech engine, so read-aloud is unavailable.'),
     ),
 
+    card('Level test', levelEl),
+
     card(
       'Word lists',
       sourcesEl,
@@ -242,6 +256,7 @@ function render() {
   drawHardness();
   drawRules();
   drawAnki();
+  drawLevelTest();
 }
 
 /** Once a deck has been read from an Anki file, offer to bring it up to date in one step. */
@@ -266,6 +281,21 @@ function drawAnki() {
       { class: 'help' },
       `Export your collection from Anki (a .colpkg file) and choose it here. The app reads “${anki.name}” the same way as last time and takes over every word Anki has reviewed since, without asking again. Last updated ${timeAgo(anki.at)}.`,
     ),
+  );
+}
+
+/** The level test's card: starting a test, and the results so far. */
+function drawLevelTest() {
+  if (!levelEl || testRunning()) return;
+  fill(
+    levelEl,
+    levelTestCard({
+      redraw: drawLevelTest,
+      started: () => {
+        render();
+        window.scrollTo(0, 0);
+      },
+    }),
   );
 }
 
