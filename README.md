@@ -96,8 +96,13 @@ on length), chosen in this order:
 2. Hard words take up to 40% of the places.
 3. Due words take the rest, the ones you are most likely to have forgotten
    first.
-4. Free places go to more new words within the allowance, then to early
-   practice of the words due soonest.
+4. Free places go to more new words within the allowance.
+5. Places still free then go to more hard words, apart from a few (5) for
+   early practice of the words due soonest. So once nothing is due and the
+   day's new words are used up, a text is made of your hard words and those
+   few early ones; with only a handful of hard words it asks for fewer words
+   instead of padding. With no hard words left, the words due soonest fill
+   the text.
 
 On top of those, Claude is given more of your due words (12, 20 or 30) and
 asked to work in as many as fit naturally. None of them is required, so the
@@ -124,6 +129,9 @@ rescheduled whenever they appear in a text.
 - **A hard word is back on the schedule after** sets how many clean reads a
   hard word needs (Anki's relearning steps), and **The hardest a word can get**
   limits how far repeated marking can push that.
+- **Early words when only hard words are left** is the number in step 5:
+  none, 3, 5, 10 or 15, or "No limit", which keeps hard words to 40% and
+  fills the rest of the text with early words.
 - **Underline hard words** can be turned off, so a hard word coming back looks
   like any other word.
 

@@ -2,7 +2,7 @@
 
 import { store } from '../store.js';
 import { fill, h, icon, plural, segmented as segmentedRow, toast } from './dom.js';
-import { cleanRead, hardRead, isDue, pickExtras, pickTargets, rulesOf, seen } from '../lib/scoring.js';
+import { cleanRead, earlyMaxOf, hardRead, isDue, pickExtras, pickTargets, rulesOf, seen } from '../lib/scoring.js';
 import { hasMemory } from '../lib/srs.js';
 import { createStopwatch, tallyWords, textKey } from '../lib/metrics.js';
 import { SentenceStream } from '../lib/textparse.js';
@@ -311,9 +311,14 @@ async function generate() {
   const length = LENGTHS[prefs.length] ? prefs.length : 'medium';
   const now = Date.now();
   const { list } = store.index;
-  const targets = pickTargets(list, store.state.progress, LENGTHS[length].targets, { now, newLeft: store.newLeft() });
+  const earlyMax = earlyMaxOf(prefs);
+  const targets = pickTargets(list, store.state.progress, LENGTHS[length].targets, {
+    now,
+    newLeft: store.newLeft(),
+    earlyMax,
+  });
   // More due words for Claude to work in where they fit; each one that makes it is a review.
-  const extras = pickExtras(list, store.state.progress, targets, LENGTHS[length].extras, { now });
+  const extras = pickExtras(list, store.state.progress, targets, LENGTHS[length].extras, { now, earlyMax });
 
   summary = null;
   error = '';

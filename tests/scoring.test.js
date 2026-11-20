@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_EARLY_MAX,
   DEFAULT_HARD_STEP,
+  EARLY_MAX_CHOICES,
   DEFAULT_MAX_HARD,
   HARD_PRESETS,
   HARD_SHARE,
@@ -12,6 +14,7 @@ import {
   capHardness,
   cleanRead,
   clearHard,
+  earlyMaxOf,
   fromAnki,
   hardPresetOf,
   hardRead,
@@ -478,4 +481,117 @@ test('with the Quick preset one clean read clears a hard word, however often it 
   assert.equal(q.s, -4);
   q = cleanRead(q, NOW + 2, thorough);
   assert.equal(q.s, -3, 'the default still needs more clean reads');
+});
+
+// ---- when only hard words are left ---------------------------------------------
+
+/** `hard` hard words (d0…), then `early` words that are not due yet (soonest first), then new ones. */
+function hardAndEarly(hard, early, total = 200) {
+  const progress = {};
+  for (let i = 0; i < hard; i++) progress[`d${i}`] = markHard(null, NOW - DAY, {});
+  for (let i = 0; i < early; i++) progress[`d${hard + i}`] = scheduled(10, 1, i + 1);
+  return { list: wordList(total), progress };
+}
+
+test('the limit on early words comes from the settings: 5 unless changed, and -1 for none', () => {
+  assert.equal(DEFAULT_EARLY_MAX, 5);
+  assert.ok(
+    EARLY_MAX_CHOICES.includes(DEFAULT_EARLY_MAX) && EARLY_MAX_CHOICES.includes(0) && EARLY_MAX_CHOICES.at(-1) === -1,
+  );
+  assert.equal(earlyMaxOf({}), 5);
+  assert.equal(earlyMaxOf(undefined), 5);
+  assert.equal(earlyMaxOf({ earlyMax: 'x' }), 5);
+  assert.equal(earlyMaxOf({ earlyMax: 0 }), 0);
+  assert.equal(earlyMaxOf({ earlyMax: '10' }), 10);
+  assert.equal(earlyMaxOf({ earlyMax: -1 }), Infinity);
+  assert.equal(earlyMaxOf({ earlyMax: 5000 }), 99);
+});
+
+test('with everything else done, a text is made of hard words and only a few early ones', () => {
+  const { list, progress } = hardAndEarly(60, 60);
+  const picked = pickTargets(list, progress, 30, { now: NOW, newLeft: 0, earlyMax: 5, rng: rng() });
+  assert.deepEqual(kinds(picked), { hard: 25, due: 0, new: 0, early: 5 });
+  assert.equal(new Set(ids(picked)).size, 30, 'no word twice');
+  assert.ok(picked.filter((p) => p.kind === 'hard').every((p) => p.hard));
+  assert.deepEqual(ids(picked, 'early'), ['d60', 'd61', 'd62', 'd63', 'd64'], 'the ones due soonest');
+});
+
+test('the number of early words follows the setting', () => {
+  const { list, progress } = hardAndEarly(60, 60);
+  const mix = (earlyMax) => kinds(pickTargets(list, progress, 30, { now: NOW, newLeft: 0, earlyMax, rng: rng() }));
+  assert.deepEqual(mix(0), { hard: 30, due: 0, new: 0, early: 0 });
+  assert.deepEqual(mix(10), { hard: 20, due: 0, new: 0, early: 10 });
+  assert.deepEqual(mix(99), { hard: 12, due: 0, new: 0, early: 18 }, 'a limit above what is free changes nothing');
+  assert.deepEqual(
+    mix(Infinity),
+    { hard: 12, due: 0, new: 0, early: 18 },
+    'no limit: as before, hard words keep to 40%',
+  );
+  assert.deepEqual(kinds(pickTargets(list, progress, 30, { now: NOW, newLeft: 0, rng: rng() })), mix(Infinity));
+});
+
+test('with few hard words the text is shorter instead of being padded', () => {
+  const { list, progress } = hardAndEarly(4, 60);
+  const picked = pickTargets(list, progress, 30, { now: NOW, newLeft: 0, earlyMax: 5, rng: rng() });
+  assert.deepEqual(
+    kinds(picked),
+    { hard: 4, due: 0, new: 0, early: 5 },
+    'no further early words and no new words past the allowance',
+  );
+  const none = hardAndEarly(4, 0);
+  assert.deepEqual(
+    kinds(pickTargets(none.list, none.progress, 30, { now: NOW, newLeft: 0, earlyMax: 5, rng: rng() })),
+    {
+      hard: 4,
+      due: 0,
+      new: 0,
+      early: 0,
+    },
+  );
+});
+
+test('due and new words keep their places; only the places left over change hands', () => {
+  const { list, progress } = hardAndEarly(60, 60);
+  for (let i = 0; i < 6; i++) progress[`d${130 + i}`] = scheduled(5, 20, -3); // six due words
+  const picked = pickTargets(list, progress, 30, { now: NOW, newLeft: 15, earlyMax: 5, rng: rng() });
+  // 12 hard (40%) and 6 due leave 12 places, which the day's new words take (the allowance is 15).
+  assert.deepEqual(kinds(picked), { hard: 12, due: 6, new: 12, early: 0 });
+  const later = pickTargets(list, progress, 30, { now: NOW, newLeft: 4, earlyMax: 5, rng: rng() });
+  assert.deepEqual(
+    kinds(later),
+    { hard: 15, due: 6, new: 4, early: 5 },
+    'with the allowance nearly used, hard words take what is left over',
+  );
+  const backlog = { ...progress };
+  for (let i = 0; i < 40; i++) backlog[`d${140 + i}`] = scheduled(5, 20, -3);
+  const busy = pickTargets(list, backlog, 30, { now: NOW, newLeft: 0, earlyMax: 5, rng: rng() });
+  assert.deepEqual(kinds(busy), { hard: 12, due: 18, new: 0, early: 0 }, 'with plenty due, nothing changes');
+});
+
+test('with no hard words left, the words due soonest are practised as before', () => {
+  const { list, progress } = hardAndEarly(0, 60);
+  const picked = pickTargets(list, progress, 30, { now: NOW, newLeft: 0, earlyMax: 5, rng: rng() });
+  assert.deepEqual(kinds(picked), { hard: 0, due: 0, new: 0, early: 30 });
+});
+
+test('the optional words keep to the limit on early words too', () => {
+  const { list, progress } = hardAndEarly(60, 60);
+  const opts = { now: NOW, newLeft: 0, earlyMax: 5, rng: rng() };
+  const targets = pickTargets(list, progress, 30, opts);
+  assert.deepEqual(pickExtras(list, progress, targets, 30, opts), [], 'the five early words are already in the text');
+  // A short text shares its free places the same way: early words first, up to the limit.
+  assert.deepEqual(kinds(pickTargets(list, progress, 10, opts)), { hard: 5, due: 0, new: 0, early: 5 });
+  // Due words are always offered; only the early ones are limited.
+  for (let i = 0; i < 40; i++) progress[`d${140 + i}`] = scheduled(5, 20, -3);
+  const busy = pickTargets(list, progress, 30, opts);
+  const extras = pickExtras(list, progress, busy, 30, opts);
+  assert.equal(extras.length, 22 + 5, 'the 22 due words left over, then five early ones');
+  assert.ok(extras.slice(0, 22).every((e) => Number(e.id.slice(1)) >= 140));
+  // Without hard words, or without a limit, the list is filled as before.
+  const calm = hardAndEarly(0, 60);
+  const calmTargets = pickTargets(calm.list, calm.progress, 30, opts);
+  assert.equal(pickExtras(calm.list, calm.progress, calmTargets, 30, opts).length, 30);
+  const free = { ...opts, earlyMax: Infinity };
+  const { list: l2, progress: p2 } = hardAndEarly(60, 60);
+  assert.equal(pickExtras(l2, p2, pickTargets(l2, p2, 30, free), 30, free).length, 30);
 });

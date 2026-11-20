@@ -6,7 +6,7 @@
 
 import { emptyRead, mergeReads, sanitizeRead } from './goal.js';
 import { mergeTests, sanitizeTests } from './leveltest.js';
-import { DEFAULT_HARD_STEP, DEFAULT_MAX_HARD, upgradeProgress } from './scoring.js';
+import { DEFAULT_EARLY_MAX, DEFAULT_HARD_STEP, DEFAULT_MAX_HARD, upgradeProgress } from './scoring.js';
 import { DEFAULT_NEW_PER_DAY, DEFAULT_RETENTION } from './srs.js';
 
 export const DEFAULT_PREFS = {
@@ -18,6 +18,8 @@ export const DEFAULT_PREFS = {
   autoHard: true,
   hardStep: DEFAULT_HARD_STEP,
   maxHard: DEFAULT_MAX_HARD,
+  // Early words allowed in a text while hard words are waiting; -1 means no limit.
+  earlyMax: DEFAULT_EARLY_MAX,
   underlineHard: true,
   retention: DEFAULT_RETENTION,
   newPerDay: DEFAULT_NEW_PER_DAY,

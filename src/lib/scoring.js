@@ -81,6 +81,14 @@ export const HARD_PRESETS = [
 export const HARD_SHARE = 0.4;
 
 /**
+ * While hard words are waiting, at most this many places of a text go to
+ * words that are not due yet; the other free places go to hard words. The
+ * learner can change it in Settings; -1 there means no limit.
+ */
+export const DEFAULT_EARLY_MAX = 5;
+export const EARLY_MAX_CHOICES = [0, 3, 5, 10, 15, -1];
+
+/**
  * Share of a text's target words kept for new words, within the daily limit.
  * New and hard words are the ones the learner does not know yet, so together
  * they stay a minority: the rest of a text's targets are words due for review.
@@ -109,6 +117,13 @@ export function hardStepOf(prefs) {
 /** The steps offered in Settings: 1 up to the limit on hardness. */
 export function hardStepChoices(prefs) {
   return MAX_HARD_CHOICES.filter((n) => n <= maxHardOf(prefs));
+}
+
+/** The learner's limit on early words in a text; Infinity when there is none. */
+export function earlyMaxOf(prefs) {
+  const n = Math.round(Number(prefs?.earlyMax));
+  if (n < 0) return Infinity;
+  return n >= 0 ? Math.min(n, 99) : DEFAULT_EARLY_MAX;
 }
 
 /** The id of the preset the learner's two hardness settings match, or '' when they were set by hand. */
@@ -323,10 +338,15 @@ export function wordPools(entries, progress, now) {
  *    long as today's allowance of new words (`newLeft`) lasts.
  * 2. Hard words take up to 40% of the places.
  * 3. Words that are due take what is left, the most forgotten first.
- * 4. Places still free go to more new words within the allowance, then to
- *    early practice of the words due soonest.
- * 5. If the text is still short, the limits above are passed (more hard, due
- *    and new words), and only after that do the built-in words get a turn.
+ * 4. Places still free go to more new words within the allowance.
+ * 5. What is left then depends on whether hard words are waiting:
+ *    - If they are, and early practice is limited (`earlyMax`), the free
+ *      places go to more hard words, except for up to `earlyMax` places for
+ *      the words due soonest. So once everything else is done, a text is made
+ *      of hard words and those few early ones, and is not padded further.
+ *    - Otherwise the words due soonest fill the text; if it is still short,
+ *      the limits above are passed (more hard, due and new words), and only
+ *      after that do the built-in words get a turn.
  *
  * Each result is { entry, hard, kind }, kind being 'hard', 'due', 'new' or 'early'.
  */
@@ -334,7 +354,7 @@ export function pickTargets(
   entries,
   progress,
   count,
-  { now = Date.now(), newLeft = Infinity, rng = Math.random } = {},
+  { now = Date.now(), newLeft = Infinity, earlyMax = Infinity, rng = Math.random } = {},
 ) {
   const pools = wordPools(entries, progress, now);
   const picked = [];
@@ -352,6 +372,15 @@ export function pickTargets(
 
   const dueN = take('due', pools.due.slice(0, Math.max(0, room() - reserved)));
   const newN = take('new', pools.fresh.slice(0, Math.min(allowance, room())));
+
+  if (earlyIsLimited(pools, earlyMax)) {
+    // Hard words are waiting: they get the free places, bar a few for early practice.
+    const earlyN = Math.min(earlyMax, pools.early.length, room());
+    const leftHard = pools.hard.filter((x) => !chosenHard.includes(x));
+    take('hard', weightedSample(leftHard, room() - earlyN, rng));
+    take('early', pools.early.slice(0, Math.min(earlyMax, room())));
+    return picked;
+  }
   take('early', pools.early.slice(0, room()));
 
   // Still room, which happens when little has been learned yet: go past the
@@ -368,17 +397,26 @@ export function pickTargets(
   return picked;
 }
 
+/** Whether early practice is held to `earlyMax` places: only while hard words are waiting. */
+function earlyIsLimited(pools, earlyMax) {
+  return pools.hard.length > 0 && Number.isFinite(earlyMax);
+}
+
 /**
  * Further review words for the writer to work in where they fit: the due
  * words that did not get a place among the targets, most forgotten first,
  * then the words due soonest. Every one that ends up in the text is reviewed
- * when the text is finished, so the more the better.
+ * when the text is finished, so the more the better. While early practice is
+ * limited, the early words here and among the targets together keep to the limit.
  */
-export function pickExtras(entries, progress, targets, count, { now = Date.now() } = {}) {
+export function pickExtras(entries, progress, targets, count, { now = Date.now(), earlyMax = Infinity } = {}) {
   const taken = new Set(targets.map((t) => t.entry.id));
   const pools = wordPools(entries, progress, now);
-  return [...pools.due, ...pools.early]
-    .map((x) => x.e)
-    .filter((e) => !taken.has(e.id))
-    .slice(0, count);
+  const free = (list) => list.map((x) => x.e).filter((e) => !taken.has(e.id));
+  let early = free(pools.early);
+  if (earlyIsLimited(pools, earlyMax)) {
+    const used = targets.filter((t) => t.kind === 'early').length;
+    early = early.slice(0, Math.max(0, earlyMax - used));
+  }
+  return [...free(pools.due), ...early].slice(0, count);
 }

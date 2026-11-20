@@ -6,9 +6,11 @@ import { MODELS } from '../lib/models.js';
 import { LEVELS } from '../lib/prompt.js';
 import { TEXT_GOAL_CHOICES, textGoalOf } from '../lib/goal.js';
 import {
+  EARLY_MAX_CHOICES,
   HARD_PRESETS,
   HARD_SHARE,
   MAX_HARD_CHOICES,
+  earlyMaxOf,
   hardPresetOf,
   hardStepChoices,
   hardStepOf,
@@ -323,6 +325,8 @@ function drawHardness() {
         .map((n) => h('option', { value: String(n), selected: n === current }, write(n))),
     );
   const preset = HARD_PRESETS.find((p) => p.id === hardPresetOf(prefs));
+  // The limit on early words as it is stored: a number, or -1 for none.
+  const early = Number.isFinite(earlyMaxOf(prefs)) ? earlyMaxOf(prefs) : -1;
   fill(
     hardEl,
     h(
@@ -444,6 +448,37 @@ function drawHardness() {
         'Marking a hard word again makes it harder, but it never needs more clean reads than this. Lowering it also eases words that are already harder.',
       ),
     ),
+    h(
+      'label',
+      { class: 'field' },
+      h('span', { class: 'label' }, 'Early words when only hard words are left'),
+      h(
+        'select',
+        {
+          class: 'input',
+          'aria-label': 'Early words in a text while hard words are waiting',
+          onchange: (e) => {
+            store.updatePrefs({ earlyMax: Number(e.target.value) });
+            drawRules();
+          },
+        },
+        // "No limit" comes last, and a value set elsewhere is still shown.
+        [...new Set([...EARLY_MAX_CHOICES, early])]
+          .sort((a, b) => (a < 0) - (b < 0) || a - b)
+          .map((n) =>
+            h(
+              'option',
+              { value: String(n), selected: n === early },
+              n < 0 ? 'No limit' : n === 0 ? 'None' : plural(n, 'word'),
+            ),
+          ),
+      ),
+      h(
+        'span',
+        { class: 'help' },
+        'Places in a text that are not needed for due or new words go to your hard words, apart from this many for words that are not due yet. So once everything else is done, a text is made of your hard words and these few. “No limit” keeps hard words to 40% and fills the rest with early words. With no hard words left, a text practises the words due soonest.',
+      ),
+    ),
   );
 }
 
@@ -453,6 +488,7 @@ function drawRules() {
   const step = hardStepOf(prefs);
   const max = maxHardOf(prefs);
   const percent = Math.round(retentionOf(prefs) * 100);
+  const earlyMax = earlyMaxOf(prefs);
   fill(
     rulesEl,
     h(
@@ -478,7 +514,14 @@ function drawRules() {
     h(
       'li',
       null,
-      'When nothing is due, the text practises the words that are due soonest. The built-in common words are only chosen when your deck has nothing left to offer; they are still rescheduled whenever they appear.',
+      Number.isFinite(earlyMax)
+        ? `Places left over when little is due go to more hard words, and to at most ${earlyMax} ${earlyMax === 1 ? 'word that is' : 'words that are'} not due yet. So once everything else is done, a text is made of your hard words${earlyMax ? ' and those few' : ' alone'}. With no hard words left, it practises the words due soonest.`
+        : 'Places left over when little is due practise the words that are due soonest.',
+    ),
+    h(
+      'li',
+      null,
+      'The built-in common words are only chosen when your deck has nothing left to offer; they are still rescheduled whenever they appear.',
     ),
   );
 }
