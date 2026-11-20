@@ -20,6 +20,7 @@ import { NEW_PER_DAY_CHOICES, RETENTION_CHOICES, newPerDayOf, retentionOf } from
 import { tts } from '../tts.js';
 import { pickDeckFile, updateFromAnki } from './import.js';
 import { levelTestCard, mountTest, testRunning } from './leveltest.js';
+import { describeSettings, sameSettings } from '../lib/tune.js';
 
 const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=gist&description=German%20Text%20Study%20sync';
 const KEY_URL = 'https://platform.claude.com/settings/keys';
@@ -32,6 +33,7 @@ let rulesEl;
 let hardEl;
 let ankiEl;
 let levelEl;
+let presetsEl;
 
 export function mountSettings(el) {
   root = el;
@@ -40,6 +42,7 @@ export function mountSettings(el) {
     if (what === 'words') drawSources();
     if (what === 'words' || what === 'tests') drawLevelTest();
     if (what === 'prefs') drawAnki();
+    if (what === 'prefs') drawPresets();
     if (what === 'sync' || what === 'local') drawSync();
   });
   tts.onVoices(drawVoices);
@@ -65,6 +68,7 @@ function render() {
   }
   const prefs = store.state.prefs;
   levelEl = h('div');
+  presetsEl = h('div');
   sourcesEl = h('div');
   syncEl = h('div');
   voiceEl = h('div');
@@ -207,6 +211,8 @@ function render() {
         : h('p', { class: 'help' }, 'This browser has no speech engine, so read-aloud is unavailable.'),
     ),
 
+    card('Saved settings', presetsEl),
+
     card('Level test', levelEl),
 
     card(
@@ -259,6 +265,7 @@ function render() {
   drawRules();
   drawAnki();
   drawLevelTest();
+  drawPresets();
 }
 
 /** Once a deck has been read from an Anki file, offer to bring it up to date in one step. */
@@ -282,6 +289,88 @@ function drawAnki() {
       'p',
       { class: 'help' },
       `Export your collection from Anki (a .colpkg file) and choose it here. The app reads “${anki.name}” the same way as last time and takes over every word Anki has reviewed since, without asking again. Last updated ${timeAgo(anki.at)}.`,
+    ),
+  );
+}
+
+/** Sets of study settings saved to go back to: by hand, or when Claude tuned the settings. */
+function drawPresets() {
+  if (!presetsEl || testRunning()) return;
+  const presets = store.state.prefs.presets || [];
+  const current = store.settings();
+  const kind = { ai: 'Suggested by Claude', before: 'Your settings before that', you: 'Saved by you' };
+  fill(
+    presetsEl,
+    h(
+      'p',
+      { class: 'help' },
+      'A saved set holds the level and length of your texts, new words a day, the chance of knowing a word at which it comes back, the hard-word and early-word options, whether a tap marks a word hard, and your daily goal. Using a set changes those and nothing else. Claude can suggest a set from your numbers on the Stats tab.',
+    ),
+    presets.length > 0 &&
+      h(
+        'ul',
+        { class: 'preset-list' },
+        presets.map((p) => {
+          const inUse = sameSettings(p.settings, current);
+          return h(
+            'li',
+            { class: 'preset' },
+            h(
+              'div',
+              { class: 'preset-text' },
+              h('span', { class: 'preset-name' }, p.name, inUse && [' ', h('span', { class: 'preset-on' }, 'in use')]),
+              h('span', { class: 'help' }, `${kind[p.by]} · ${describeSettings(p.settings)}`),
+            ),
+            h(
+              'div',
+              { class: 'preset-actions' },
+              h(
+                'button',
+                {
+                  class: 'btn',
+                  type: 'button',
+                  disabled: inUse,
+                  'aria-label': `Use ${p.name}`,
+                  onclick: () => {
+                    store.applySettings(p.settings);
+                    render();
+                    toast(`Now using “${p.name}”`);
+                  },
+                },
+                'Use',
+              ),
+              h(
+                'button',
+                {
+                  class: 'btn btn-quiet',
+                  type: 'button',
+                  'aria-label': `Delete ${p.name}`,
+                  onclick: () => {
+                    if (confirm(`Delete “${p.name}”? Your current settings stay as they are.`))
+                      store.deletePreset(p.id);
+                  },
+                },
+                'Delete',
+              ),
+            ),
+          );
+        }),
+      ),
+    h(
+      'div',
+      { class: 'btn-row' },
+      h(
+        'button',
+        {
+          class: 'btn',
+          type: 'button',
+          onclick: () => {
+            const p = store.savePreset('My settings');
+            toast(`Saved as “${p.name}”`);
+          },
+        },
+        'Save my current settings',
+      ),
     ),
   );
 }

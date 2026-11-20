@@ -167,6 +167,30 @@ without a tap or scroll. The numbers start from the first text you finish after
 this tab was added; they cannot be reconstructed for earlier texts. Each device
 keeps its own record of a day, and syncing adds them up.
 
+## Tuning the settings
+
+**Stats → Tune my settings** asks Claude to look at your numbers and suggest
+better settings. It sends every number of the Stats tab, your study settings,
+your level-test results and the ten words you look up most, using your API
+key. Your texts are not sent.
+
+Claude answers with a short summary and a list of changes, each with its
+reason, for example "New words a day: 15 → 10". It may change the level and
+length of the texts, new words a day, the chance of knowing a word at which
+it comes back, the hard-word and early-word options, whether a tap marks a
+word hard, and the daily goal, and only to the values the Settings tab offers.
+Nothing changes until you press Apply.
+
+Applying saves two sets under **Settings → Saved settings**: the new settings
+and the ones you had. "Go back to my earlier settings" on the Stats tab, or
+"Use" next to a set in Settings, switches back in one tap. You can also save
+your current settings as a set by hand, and delete sets. One thing does not
+come back: lowering "The hardest a word can get" eases the words that were
+harder, and they stay eased.
+
+The advice is only as good as the numbers. With fewer than ten finished texts
+the app says that the suggestions are a rough guess.
+
 ## Level test
 
 **Settings → Level test** checks your German from A1 to C2 with multiple-choice
@@ -212,8 +236,8 @@ The code is plain JavaScript modules built with Vite.
   against Anki's own results), marking and selection (`scoring.js`), the prompt
   (`prompt.js`),
   stream parsing (`textparse.js`), Anki import (`anki.js`), the daily goal
-  (`goal.js`), the numbers of the Stats tab (`metrics.js`), the level test
-  (`leveltest.js`) and sync merging
+  (`goal.js`), the numbers of the Stats tab (`metrics.js`), tuning and saved
+  settings (`tune.js`), the level test (`leveltest.js`) and sync merging
   (`merge.js`). `tests/` covers all of it.
 - `src/ui/` holds the five screens, the shared text view and the charts
   (`chart.js`), `src/claude.js` the Claude API call and `src/gist.js` the sync

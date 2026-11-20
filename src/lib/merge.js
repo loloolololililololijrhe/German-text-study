@@ -8,6 +8,7 @@ import { emptyRead, mergeReads, sanitizeRead } from './goal.js';
 import { mergeTests, sanitizeTests } from './leveltest.js';
 import { DEFAULT_EARLY_MAX, DEFAULT_HARD_STEP, DEFAULT_MAX_HARD, upgradeProgress } from './scoring.js';
 import { DEFAULT_NEW_PER_DAY, DEFAULT_RETENTION } from './srs.js';
+import { sanitizePresets } from './tune.js';
 
 export const DEFAULT_PREFS = {
   level: 'A2',
@@ -25,6 +26,8 @@ export const DEFAULT_PREFS = {
   newPerDay: DEFAULT_NEW_PER_DAY,
   // The daily goal in texts; 0 means none.
   textsPerDay: 0,
+  // Sets of study settings saved to go back to, newest first: see tune.js.
+  presets: [],
   // Names of the word lists the learner has turned off.
   listsOff: [],
   // Set after the first import from an Anki file: see sanitizeState.
@@ -101,6 +104,7 @@ export function sanitizeState(raw) {
       base.prefs.topic = DEFAULT_PREFS.topic;
       base.prefs.form = 'play';
     }
+    base.prefs.presets = sanitizePresets(raw.prefs.presets);
     const off = raw.prefs.listsOff;
     base.prefs.listsOff = Array.isArray(off) ? off.filter((x) => typeof x === 'string') : [];
     // The deck and fields last used to read an Anki file.

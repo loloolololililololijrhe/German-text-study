@@ -12,21 +12,28 @@ export class GenerationError extends Error {
   }
 }
 
+/** The tokens a finished request used. */
+function usageOf(message) {
+  const u = message.usage || {};
+  return {
+    inTok: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+    outTok: u.output_tokens || 0,
+  };
+}
+
 /**
- * Stream one reading text. `onText` receives each piece of the JSON document as
- * it arrives. Resolves when the text is complete, with the tokens the request
- * used ({ inTok, outTok }); rejects with GenerationError.
+ * Send one request whose answer must follow `schema`, and return the finished
+ * message. `onText` receives the answer piece by piece as it arrives.
  */
-export async function generateText({ apiKey, model, prompt, onText, signal }) {
+async function ask({ apiKey, model, system, prompt, schema, effort, maxTokens, onText, signal }) {
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   const params = {
     model,
-    max_tokens: 32000,
-    system: SYSTEM_PROMPT,
+    max_tokens: maxTokens,
+    system,
     messages: [{ role: 'user', content: prompt }],
-    // A short text at a known level needs little deliberation, and the learner
-    // is waiting, so keep thinking brief. The schema guarantees parseable output.
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: TEXT_SCHEMA } },
+    // The schema guarantees parseable output.
+    output_config: { effort, format: { type: 'json_schema', schema } },
   };
 
   // If a safety classifier declines the request, let the API retry it on the
@@ -38,25 +45,60 @@ export async function generateText({ apiKey, model, prompt, onText, signal }) {
         { signal },
       )
     : client.messages.stream(params, { signal });
-  stream.on('text', onText);
-
-  let message;
+  if (onText) stream.on('text', onText);
   try {
-    message = await stream.finalMessage();
+    return await stream.finalMessage();
   } catch (err) {
     throw explain(err);
   }
+}
+
+/**
+ * Stream one reading text. `onText` receives each piece of the JSON document as
+ * it arrives. Resolves when the text is complete, with the tokens the request
+ * used ({ inTok, outTok }); rejects with GenerationError.
+ */
+export async function generateText({ apiKey, model, prompt, onText, signal }) {
+  // A short text at a known level needs little deliberation, and the learner
+  // is waiting, so keep thinking brief.
+  const message = await ask({
+    apiKey,
+    model,
+    system: SYSTEM_PROMPT,
+    prompt,
+    schema: TEXT_SCHEMA,
+    effort: 'low',
+    maxTokens: 32000,
+    onText,
+    signal,
+  });
   if (message.stop_reason === 'refusal') {
     throw new GenerationError('Claude declined to write this text. Try a different topic.');
   }
   if (message.stop_reason === 'max_tokens') {
     throw new GenerationError('The text was cut off before it finished. Try a shorter length.');
   }
-  const u = message.usage || {};
-  return {
-    inTok: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
-    outTok: u.output_tokens || 0,
-  };
+  return usageOf(message);
+}
+
+/**
+ * Ask for an answer in the shape of `schema` and return it parsed, with the
+ * tokens used: { answer, inTok, outTok }. Rejects with GenerationError.
+ */
+export async function askJson({ apiKey, model, system, prompt, schema, signal }) {
+  // Weighing a learner's numbers deserves more thought than writing a short text.
+  const message = await ask({ apiKey, model, system, prompt, schema, effort: 'medium', maxTokens: 16000, signal });
+  if (message.stop_reason === 'refusal') throw new GenerationError('Claude declined to answer this request.');
+  if (message.stop_reason === 'max_tokens') throw new GenerationError('Claude’s answer was cut off. Please try again.');
+  const text = (message.content || [])
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+  try {
+    return { answer: JSON.parse(text), ...usageOf(message) };
+  } catch {
+    throw new GenerationError('Claude’s answer could not be read. Please try again.');
+  }
 }
 
 function explain(err) {

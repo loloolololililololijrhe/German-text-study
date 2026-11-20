@@ -1754,3 +1754,111 @@ input[type='range'] {
 .lt-rev-options .is-wrong {
   color: var(--danger);
 }
+
+/* ---- tuning and saved settings --------------------------------------------- */
+
+.tune .notice {
+  margin: 12px 0 0;
+}
+
+.tune .writing {
+  margin: 12px 0 0;
+}
+
+.tune-summary {
+  margin: 0;
+}
+
+.tune-changes {
+  display: grid;
+  gap: 0;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tune-changes li {
+  display: grid;
+  /* On a phone the values go under the name; on a wider screen beside it. */
+  grid-template-columns: 1fr;
+  gap: 2px 12px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 560px) {
+  .tune-changes li {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+.tune-changes li:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.tune-what {
+  font-weight: 550;
+}
+
+.tune-values {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tune-from {
+  color: var(--muted);
+}
+
+.tune-changes .help {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.preset-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.preset:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.preset-text {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.preset-name {
+  font-weight: 550;
+}
+
+.preset-on {
+  margin-left: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.preset-actions {
+  display: flex;
+  gap: 8px;
+}

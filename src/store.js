@@ -13,6 +13,7 @@ import {
 } from './lib/merge.js';
 import { goalStatus, markRead } from './lib/goal.js';
 import { mergeTests } from './lib/leveltest.js';
+import { makePreset, settingsOf, withPreset, withoutPreset } from './lib/tune.js';
 import { addRecord, emptyStats, mergeStats, newDeviceId, sanitizeStats, snapshotOf } from './lib/metrics.js';
 import { capHardness, maxHardOf } from './lib/scoring.js';
 import { dayKey, newPerDayOf } from './lib/srs.js';
@@ -231,6 +232,31 @@ export const store = {
     write(TEXTS_KEY, this.history);
     this.emit('history');
     this.syncSoon();
+  },
+
+  /** The study settings as they stand: see TUNABLE in tune.js. */
+  settings() {
+    return settingsOf(this.state.prefs);
+  },
+
+  /** Save the study settings as they stand as a set to go back to, and return it. */
+  savePreset(label, by = 'you') {
+    const preset = makePreset({ label, by, settings: this.settings(), now: Date.now() });
+    this.updatePrefs({ presets: withPreset(this.state.prefs.presets, preset) });
+    return preset;
+  },
+
+  /**
+   * Put a set of study settings to use. With `keep`, the set is also saved,
+   * so that it can be chosen again later.
+   */
+  applySettings(settings, keep = null) {
+    const presets = keep ? withPreset(this.state.prefs.presets, keep) : this.state.prefs.presets;
+    this.updatePrefs({ ...settings, presets });
+  },
+
+  deletePreset(id) {
+    this.updatePrefs({ presets: withoutPreset(this.state.prefs.presets, id) });
   },
 
   /** Keep the result of a level test. */

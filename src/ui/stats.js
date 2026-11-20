@@ -3,6 +3,7 @@
 import { store } from '../store.js';
 import { fill, h, plural, segmented, toast } from './dom.js';
 import { timeChart } from './chart.js';
+import { tuneCard } from './tune.js';
 import { textGoalOf } from '../lib/goal.js';
 import {
   bucket,
@@ -213,6 +214,7 @@ function render() {
         'No numbers yet. From the next text you finish, the app keeps count of your reading time, your lookups, and how your words move between new, hard, learning and known.',
       ),
     hasAny && tiles(c, active, span),
+    hasAny && tuneCard(),
     hasAny && lookupCard(c, prefs),
     hasAny && range !== 'today' && wordsCard(stats, days),
     hasAny && range !== 'today' && daysCard(stats, days, prefs),
